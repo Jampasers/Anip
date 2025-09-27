@@ -23,7 +23,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
             await ctx.send("❌ Amount tidak boleh 0.")
             return
 
-        # Cari user berdasarkan nama (GrowID)
+        # Cari user berdasarkan nama (GrowID) Nigga
         c.execute("SELECT balance FROM users WHERE nama = ?", (g,))
         row = c.fetchone()
         if not row:
