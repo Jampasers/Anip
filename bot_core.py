@@ -6,11 +6,17 @@ import discord
 from discord.ext import commands
 import sqlite3
 import re
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 # ===== Config =====
-PREFIX = "!"
-BOT_TOKEN = "MTEwODM1NzUwMTY4NDA0Mzg5Nw.GrS0L_.hum-cNz1D2n19JDG9_YrVw0bEidDn1ZcYquaUk"  # ganti tokenmu
+PREFIX = os.getenv("PREFIX")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+print(PREFIX)
+print(BOT_TOKEN)
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)

@@ -1,0 +1,7 @@
+{
+  "ignore": [
+    "discord_sqlite_bot.db",
+    "logs/",
+    "*.log"
+  ]
+}

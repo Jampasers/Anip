@@ -1,0 +1,36 @@
+# ⛔ Python build
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+
+# ⛔ Virtual env
+venv/
+venv-bot/
+
+# ⛔ Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ⛔ Environment & config
+.env
+*.env
+config.json
+nodemon.json
+
+# ⛔ SQLite / Database
+*.db
+discord_sqlite_bot.db
+
+# ⛔ Archive / Kompresi
+*.zip
+*.tar
+*.gz
+bot dc.zip
+
+# ⛔ System
+.DS_Store
+Thumbs.db
