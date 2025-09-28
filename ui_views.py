@@ -279,6 +279,9 @@ class BuyModal(Modal, title="Enter Amount"):
         items = c.fetchall()
         c.execute("SELECT balance, poin FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()
+        balance_sekarang = None
+        wl_dari_poin = None
+        sisa_poin = None
 
         if row:
             balance_sekarang, poin_sekarang = row
@@ -286,14 +289,6 @@ class BuyModal(Modal, title="Enter Amount"):
             sisa_poin = poin_sekarang % 5
             c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
               (balance_sekarang + wl_dari_poin, sisa_poin, uid))
-
-            # (Opsional) Kirim pesan ke user
-            await ctx.send(
-                f"🔄 Konversi poin selesai!\n"
-                f"+{wl_dari_poin} WL dari poin\n"
-                f"WL Kamu Sekarang: {balance_sekarang + wl_dari_poin}\n"
-                f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
-            )
 
         ids = [str(x[0]) for x in items]
         if not ids:
@@ -317,6 +312,12 @@ class BuyModal(Modal, title="Enter Amount"):
                 f"Total  : {total}\n"
                 f"Balance: {new_balance}\n\n"
                 f"📦 Items:\n{bought_names}```"
+            )
+            await self.author.send(
+                f"🔄 Konversi poin selesai!\n"
+                f"+{wl_dari_poin} WL dari poin\n"
+                f"WL Kamu Sekarang: {balance_sekarang + wl_dari_poin}\n"
+                f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
             )
             await self.author.send(msg)
         except Exception:
