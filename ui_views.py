@@ -282,11 +282,13 @@ class BuyModal(Modal, title="Enter Amount"):
         balance_sekarang = None
         wl_dari_poin = None
         sisa_poin = None
+        poin_after = None
 
         if row:
             balance_sekarang, poin_sekarang = row
-            wl_dari_poin = poin_sekarang // 5
-            sisa_poin = poin_sekarang % 5
+            poin_after = poin_sekarang + total
+            wl_dari_poin = poin_after // 5
+            sisa_poin = poin_after % 5
             c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
               (balance_sekarang + wl_dari_poin, sisa_poin, uid))
 
