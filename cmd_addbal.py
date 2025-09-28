@@ -1,5 +1,6 @@
 from discord.ext import commands
-from utils import is_allowed_user, is_maintenance
+import discord
+from utils import is_allowed_user   
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
 
@@ -7,23 +8,49 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         import re
         return re.sub(r'[^a-z0-9]', '', (s or '').lower())
 
-    @bot.command(name="addbal", usage=f"{PREFIX}addbal <growid> <amount>")
-    @is_allowed_user() #hanya user di ALLOWED_USERNAMES
-    @is_maintenance()
-    async def addbal(ctx, growid: str, amount: int):
-        # Normalisasi growid: lowercase, hanya a-z0-9
-        g = normalize_name(growid)
+    @bot.command(name="addbal", usage=f"{PREFIX}addbal <growid/@user> <amount>")
+    @is_allowed_user()
+    async def addbal(ctx, target: str, amount: int):
+        # Cek jika yang dikasih adalah tag user
+        if ctx.message.mentions:
+            user = ctx.message.mentions[0]
+            user_id = str(user.id)
+
+            # Langsung update berdasarkan user ID, tanpa cek GrowID
+            c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+            row = c.fetchone()
+            if not row:
+                await ctx.send("❌ User belum terdaftar.")
+                return
+
+            current = int(row[0] or 0)
+            new_balance = current + amount
+
+            c.execute("UPDATE users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
+            conn.commit()
+
+            sign = "+" if amount > 0 else ""
+            await ctx.send(
+                "```💰 Balance Updated (via User)\n"
+                "--------------------------\n"
+                f"User   : {user.name}\n"
+                f"Change : {sign}{fmt_wl(amount)} WL\n"
+                f"Before : {fmt_wl(current)} WL\n"
+                f"After  : {fmt_wl(new_balance)} WL```"
+            )
+            return
+        
+        # Kalau bukan mention user, anggap GrowID manual
+        g = normalize_name(target)
 
         if not g:
             await ctx.send("❌ GrowID tidak valid. Gunakan huruf/angka saja.")
             return
 
-        # amount boleh negatif (untuk koreksi), nol ditolak
         if amount == 0:
             await ctx.send("❌ Amount tidak boleh 0.")
             return
 
-        # Cari user berdasarkan nama (GrowID) Nigga
         c.execute("SELECT balance FROM users WHERE nama = ?", (g,))
         row = c.fetchone()
         if not row:
@@ -31,14 +58,14 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
             return
 
         current = int(row[0] or 0)
-        new_balance = current + int(amount)
+        new_balance = current + amount
 
         c.execute("UPDATE users SET balance = ? WHERE nama = ?", (new_balance, g))
         conn.commit()
 
         sign = "+" if amount > 0 else ""
         await ctx.send(
-            "```💰 Balance Updated\n"
+            "```💰 Balance Updated (via GrowID)\n"
             "--------------------------\n"
             f"GrowID : {g}\n"
             f"Change : {sign}{fmt_wl(amount)} WL\n"
