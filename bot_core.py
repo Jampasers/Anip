@@ -32,6 +32,11 @@ c.execute("""CREATE TABLE IF NOT EXISTS users (
     balance INTEGER DEFAULT 0
 )""")
 
+try:
+    c.execute("ALTER TABLE users ADD COLUMN poin INTEGER DEFAULT 0")
+except sqlite3.OperationalError:
+    pass  # kalau udah ada, abaikan
+
 # Tambah kolom user_id kalau tabel lama belum punya (abaikan error kalau sudah ada)
 try:
     c.execute("ALTER TABLE users ADD COLUMN user_id INTEGER")
