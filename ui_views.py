@@ -590,7 +590,7 @@ class StockView(View):
         )
         self.add_item(
             Button(label="BUY PO", style=discord.ButtonStyle.green, custom_id="buy_po",
-                disabled=True)
+                disabled=self.is_mt())
         )  # << NEW
         self.add_item(
             Button(
