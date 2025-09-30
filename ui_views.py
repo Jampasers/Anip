@@ -15,6 +15,7 @@
 import re
 import asyncio
 import discord
+import os
 from discord.ui import View, Button, Modal, TextInput, Select
 
 # ===== Globals (diisi dari setup) =====
@@ -809,7 +810,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     @bot.event
     async def on_ready():
         try:
-            guild_id = 839981629044555847
+            guild_id = os.getenv("server_id")
             await bot.tree.sync(guild=discord.Object(id=guild_id))
             print(f"Slash command synced for guild {guild_id}")
         except Exception as e:
