@@ -55,7 +55,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         return embed
 
     # @bot.command(name="stock")
-    @bot.hybrid_command(name="stcck",
+    @bot.hybrid_command(name="stock",
                         usage=f"{PREFIX}stock",
                         description="Show stock")
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
