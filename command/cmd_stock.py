@@ -60,7 +60,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         description="Show stock")
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def stock(ctx):
         """Set channel untuk auto-update stock"""
         embed = build_embed()

@@ -241,7 +241,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}omset",
                         description="Show omset")
     @is_allowed_user()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     @is_maintenance()
     async def omset(ctx: commands.Context):
         """Tampilkan panel analitik dengan UI interaktif ber-emoji."""

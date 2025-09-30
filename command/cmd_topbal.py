@@ -5,6 +5,7 @@ import math
 from utils import is_allowed_user, is_maintenance
 from discord import app_commands
 import os
+import discord
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the topbal command with a paginated leaderboard."""
@@ -52,7 +53,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}topbal",
                         description="Top balance di bot")
     @is_maintenance()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def topbal(ctx):
         c.execute("SELECT nama, balance FROM users WHERE balance > 0 ORDER BY balance DESC")
         rows = c.fetchall()

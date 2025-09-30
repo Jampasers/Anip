@@ -2,6 +2,7 @@ from discord.ext import commands
 from utils import is_allowed_user, is_maintenance
 from discord import app_commands
 import os
+import discord
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the setharga command."""
@@ -11,7 +12,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         description="Set harga product")
     @is_allowed_user()  # hanya user di
     @is_maintenance()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def setharga(ctx, code: str, price: int):
         c.execute("SELECT 1 FROM stock WHERE kode = ?", (code,))
         if not c.fetchone():

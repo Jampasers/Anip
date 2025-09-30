@@ -2,12 +2,13 @@ from discord.ext import commands
 from discord import app_commands
 from utils import is_allowed_user, is_maintenance
 import os
+import discord
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the buy command."""
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     # @bot.command(usage=f"{PREFIX}buy <code> <amount>")
     @bot.hybrid_command(name="buy",
                         usage=f"{PREFIX}buy <code> <amount>",

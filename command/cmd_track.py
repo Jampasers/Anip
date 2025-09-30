@@ -11,7 +11,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}track <order_id>",
                         description="Track order")
     @is_allowed_user()
-    @app_commands.guilds(os.getenv("SERVER_ID"))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def track(ctx, order_id: int):
         # === Cek transaksi BUY ===
         c.execute(
