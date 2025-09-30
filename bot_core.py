@@ -246,7 +246,7 @@ async def on_ready():
         guild_id = os.getenv("SERVER_ID")
         await bot.tree.clear_commands()
         await bot.tree.sync()
-        await bot.tree.sync(guild=discord.Object(id=guild_id)) #guild=discord.Object(id=guild_id)
+        # await bot.tree.sync(guild=discord.Object(id=guild_id)) #guild=discord.Object(id=guild_id)
         print(f"Slash command synced for guild {guild_id}")
     except Exception as e:
         print(f"Gagal sync command: {e}")
