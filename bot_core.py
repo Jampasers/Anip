@@ -108,6 +108,30 @@ import ui_views
 
 TARGET_CHANNEL_ID = 1415979811154821170  # ganti dengan ID channel webhook game
 
+@tasks.loop(seconds=10)  # jalan tiap 10 detik
+async def auto_allocate_po():
+    # Ambil semua kode produk yg ada preorder waiting
+    c.execute("SELECT DISTINCT kode FROM preorders WHERE status='waiting'")
+    rows = c.fetchall()
+    for (kode,) in rows:
+        await allocate_preorders(kode)
+
+
+    # pastikan loop auto allocate start saat bot ready
+    @bot.event
+    async def on_ready():
+        try:
+            guild_id = os.getenv("SERVER_ID")
+            await bot.tree.sync(guild=discord.Object(id=guild_id))
+            print(f"Slash command synced for guild {guild_id}")
+        except Exception as e:
+            print(f"Gagal sync command: {e}")
+
+        if not auto_allocate_po.is_running():
+            auto_allocate_po.start()
+
+        print("[AUTO_ALLOCATE] Loop started")
+
 @bot.event
 async def on_message(message: discord.Message):
     """Custom message handler for topup logic and command processing."""

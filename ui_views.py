@@ -774,15 +774,6 @@ async def allocate_preorders(kode: str):
 from discord.ext import tasks
 
 
-@tasks.loop(seconds=10)  # jalan tiap 10 detik
-async def auto_allocate_po():
-    # Ambil semua kode produk yg ada preorder waiting
-    c.execute("SELECT DISTINCT kode FROM preorders WHERE status='waiting'")
-    rows = c.fetchall()
-    for (kode,) in rows:
-        await allocate_preorders(kode)
-
-
 # ============================================================
 # Setup hook
 # ============================================================
@@ -806,20 +797,6 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
 
     bot.add_listener(on_interaction, "on_interaction")
 
-    # pastikan loop auto allocate start saat bot ready
-    @bot.event
-    async def on_ready():
-        try:
-            guild_id = os.getenv("server_id")
-            await bot.tree.sync(guild=discord.Object(id=guild_id))
-            print(f"Slash command synced for guild {guild_id}")
-        except Exception as e:
-            print(f"Gagal sync command: {e}")
-
-        if not auto_allocate_po.is_running():
-            auto_allocate_po.start()
-
-        print("[AUTO_ALLOCATE] Loop started")
 
     # handler tombol
     async def on_interaction(interaction: discord.Interaction):
