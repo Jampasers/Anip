@@ -5,7 +5,7 @@ import discord
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the track command to show transaction or preorder details."""
     # @bot.command(usage=f"{PREFIX}track <order_id>")
-    @bot.hybrid_command(name="addbal",
+    @bot.hybrid_command(name="track",
                         usage=f"{PREFIX}track <order_id>",
                         description="Track order")
     @is_allowed_user()
