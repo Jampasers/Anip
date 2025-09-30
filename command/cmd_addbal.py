@@ -14,10 +14,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     # @bot.command(name="addbal", usage=f"{PREFIX}addbal <growid/@user> <amount>")
     @bot.hybrid_command(name="addbal",
                         usage=f"{PREFIX}addbal <growid/@user> <amount>",
-                        description="Addbal user", 
-                        guild_ids= os.getenv("SERVER_ID"))
+                        description="Addbal user")
     @is_allowed_user()
-    # @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
+    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def addbal(ctx, target: str, amount: int):
         """Add world lock balance to a user or growID."""
         # Cek jika yang dikasih adalah tag user
