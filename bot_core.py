@@ -244,9 +244,9 @@ async def auto_allocate_po():
 async def on_ready():
     try:
         guild_id = os.getenv("SERVER_ID")
-        await bot.tree.clear_commands()
-        await bot.tree.sync()
-        # await bot.tree.sync(guild=discord.Object(id=guild_id)) #guild=discord.Object(id=guild_id)
+        await bot.tree.clear_commands(guild=None)
+        await bot.tree.sync(guild=None)
+        await bot.tree.sync(guild=discord.Object(id=guild_id)) #guild=discord.Object(id=guild_id)
         print(f"Slash command synced for guild {guild_id}")
     except Exception as e:
         print(f"Gagal sync command: {e}")
