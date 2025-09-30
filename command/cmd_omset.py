@@ -234,7 +234,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     # ---------------------------
     # COMMAND
     # ---------------------------
-    @bot.command(name="omset", usage=f"{PREFIX}omset")
+    # @bot.command(name="omset", usage=f"{PREFIX}omset")
+    @bot.hybrid_command(name="omset",
+                        usage=f"{PREFIX}omset",
+                        description="Show omset")
     @is_allowed_user()
     @is_maintenance()
     async def omset(ctx: commands.Context):

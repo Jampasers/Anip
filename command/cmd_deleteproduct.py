@@ -3,10 +3,13 @@ from utils import is_allowed_user, is_maintenance
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the deletproduct command."""
-    @bot.command(name="deletproduct", usage=f"{PREFIX}deletproduct <code>")
+    # @bot.command(name="deletproduct", usage=f"{PREFIX}deletproduct <code>")
+    @bot.hybrid_command(name="deleteproduct",
+                        usage=f"{PREFIX}deleteproduct <cod>",
+                        description="Delete product from database")
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
-    async def deletproduct(ctx, code: str):
+    async def deleteproduct(ctx, code: str):
         c.execute("SELECT judul, harga FROM stock WHERE kode = ?", (code,))
         row = c.fetchone()
         if not row:

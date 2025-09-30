@@ -52,7 +52,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         embed.description = "\n========================================\n".join(desc_parts)
         return embed
 
-    @bot.command(name="stock")
+    # @bot.command(name="stock")
+    @bot.hybrid_command(name="stcck",
+                        usage=f"{PREFIX}stock",
+                        description="Show stock")
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
     async def stock(ctx):

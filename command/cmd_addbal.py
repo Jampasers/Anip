@@ -9,7 +9,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         import re
         return re.sub(r'[^a-z0-9]', '', (s or '').lower())
 
-    @bot.command(name="addbal", usage=f"{PREFIX}addbal <growid/@user> <amount>")
+    # @bot.command(name="addbal", usage=f"{PREFIX}addbal <growid/@user> <amount>")
+    @bot.hybrid_command(name="addbal",
+                        usage=f"{PREFIX}addbal <growid/@user> <amount>",
+                        description="Addbal user")
     @is_allowed_user()
     async def addbal(ctx, target: str, amount: int):
         """Add world lock balance to a user or growID."""

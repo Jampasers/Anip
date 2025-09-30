@@ -6,7 +6,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX, DB_NAME):
     """Register the status command."""
     start_time = time.time()
 
-    @bot.command(usage=f"{PREFIX}status")
+    # @bot.command(usage=f"{PREFIX}status")
+    @bot.hybrid_command(name="status",
+                        usage=f"{PREFIX}status",
+                        description="Check status hosting, bot, dll")
     async def status(ctx):
         ping_ms = round(bot.latency * 1000)
         signal = "Good" if ping_ms < 100 else "Mid" if ping_ms < 200 else "Bad" if ping_ms < 400 else ""

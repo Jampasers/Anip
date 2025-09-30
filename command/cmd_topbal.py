@@ -45,8 +45,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
             self.add_item(prev_button)
             self.add_item(next_button)
 
-    @bot.command(name="topbal", usage=f"{PREFIX}topbal")
-    @is_allowed_user()
+    # @bot.command(name="topbal", usage=f"{PREFIX}topbal")
+    @bot.hybrid_command(name="topbal",
+                        usage=f"{PREFIX}topbal",
+                        description="Top balance di bot")
     @is_maintenance()
     async def topbal(ctx):
         c.execute("SELECT nama, balance FROM users WHERE balance > 0 ORDER BY balance DESC")

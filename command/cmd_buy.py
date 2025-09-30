@@ -5,7 +5,10 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the buy command."""
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
-    @bot.command(usage=f"{PREFIX}buy <code> <amount>")
+    # @bot.command(usage=f"{PREFIX}buy <code> <amount>")
+    @bot.hybrid_command(name="buy",
+                        usage=f"{PREFIX}buy <code> <amount>",
+                        description="Buy product from the bot")
     async def buy(ctx, code: str, amount: int):
         uid = ctx.author.id
         c.execute("SELECT balance FROM users WHERE user_id = ?", (uid,))
