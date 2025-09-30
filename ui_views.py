@@ -811,21 +811,6 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
         if not auto_allocate_po.is_running():
             auto_allocate_po.start()
 
-        c.execute("SELECT channel_id, message_id FROM stock_embed LIMIT 1")
-        row = c.fetchone()
-        if row:
-            ch = bot.get_channel(row[0])
-            if ch:
-                try:
-                    msg = await ch.fetch_message(row[1])
-                    message_cache["channel_id"] = row[0]
-                    message_cache["message"] = msg
-                    if not update_stock.is_running():
-                        update_stock.start()
-                    print("[STOCK EMBED] Loop resumed from DB.")
-                except Exception as e:
-                    print(f"[STOCK EMBED] Gagal fetch message: {e}")
-
         print("[AUTO_ALLOCATE] Loop started")
 
     # handler tombol
