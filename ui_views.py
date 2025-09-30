@@ -808,6 +808,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     # pastikan loop auto allocate start saat bot ready
     @bot.event
     async def on_ready():
+        await bot.tree.sync()
         if not auto_allocate_po.is_running():
             auto_allocate_po.start()
 
