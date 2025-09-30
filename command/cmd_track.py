@@ -1,6 +1,7 @@
 from discord.ext import commands
 from utils import is_allowed_user
 import discord
+from discord import app_commands
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the track command to show transaction or preorder details."""
@@ -9,6 +10,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}track <order_id>",
                         description="Track order")
     @is_allowed_user()
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     async def track(ctx, order_id: int):
         # === Cek transaksi BUY ===
         c.execute(

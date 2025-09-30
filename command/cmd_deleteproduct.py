@@ -1,4 +1,5 @@
 from discord.ext import commands
+from discord import app_commands
 from utils import is_allowed_user, is_maintenance
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
@@ -9,6 +10,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         description="Delete product from database")
     @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
     @is_maintenance()
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     async def deleteproduct(ctx, code: str):
         c.execute("SELECT judul, harga FROM stock WHERE kode = ?", (code,))
         row = c.fetchone()

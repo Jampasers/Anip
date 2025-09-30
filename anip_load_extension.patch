@@ -1,0 +1,90 @@
+*** Begin Patch
+*** Update File: bot_core.py
+@@
+-# ===== Load modules =====
+-# Dynamically import all Python modules inside the `command` directory and call their setup functions.
+-commands_dir = os.path.join(os.path.dirname(__file__), "command")
+-for _, module_name, _ in pkgutil.iter_modules([commands_dir]):
+-    mod = importlib.import_module(f"command.{module_name}")
+-    if hasattr(mod, "setup"):
+-        try:
+-            mod.setup(bot, c, conn, fmt_wl, PREFIX)
+-        except TypeError:
+-            # Some modules (e.g. cmd_status) require DB_NAME as extra argument
+-            mod.setup(bot, c, conn, fmt_wl, PREFIX, DB_NAME)
++# ===== Load modules =====
++# Expose shared resources on the bot so that command extensions can access
++# the database cursor, connection, formatter, prefix, and DB name directly.
++bot.c = c
++bot.conn = conn
++bot.fmt_wl = fmt_wl
++bot.PREFIX = PREFIX
++bot.DB_NAME = DB_NAME
++
++# Dynamically load all Python modules inside the `command` directory as
++# extensions. Each module should define a `setup(bot)` coroutine/function.
++commands_dir = os.path.join(os.path.dirname(__file__), "command")
++for _, module_name, _ in pkgutil.iter_modules([commands_dir]):
++    ext_path = f"command.{module_name}"
++    try:
++        bot.load_extension(ext_path)
++    except Exception as e:
++        # Log failures without stopping the bot
++        print(f"Failed to load extension {ext_path}: {e}")
+*** End Patch
+*** End Patch
+*** Begin Patch
+*** Update File: command/cmd_mt.py
+@@
+-from discord.ext import commands
+-from utils import is_allowed_user
+-
+-def setup(bot, c, conn, fmt_wl, PREFIX):
+-    """Register the maintenance toggle command."""
+-    # @bot.command(usage=f"{PREFIX}mt")
+-    @bot.hybrid_command(name="mt", usage=f"{PREFIX}mt", description="Toggle maintenance mode")
+-    @is_allowed_user()
+-    async def mt(ctx):
+-        # Toggle nilai is_mt
+-        c.execute("UPDATE maintenance SET is_mt = 1 - is_mt")
+-        # Ambil nilai setelah update
+-        c.execute("SELECT is_mt FROM maintenance LIMIT 1")
+-        row = c.fetchone()
+-        # Pastikan data valid
+-        if row is not None:
+-            status = "️ Maintenance Aktif!" if row[0] == 1 else "✅ Maintenance Nonaktif."
+-            await ctx.send(f"```{status}```")
+-        else:
+-            await ctx.send("```❌ Tidak ada data di tabel maintenance.```")
+-        conn.commit()
++from discord.ext import commands
++from utils import is_allowed_user
++
++async def setup(bot: commands.Bot):
++    """
++    Register the maintenance toggle command as a hybrid command.
++    This setup function is designed to be used with `bot.load_extension`.
++    It retrieves the shared database cursor, connection and prefix from the bot instance.
++    """
++    # Access shared resources from the bot
++    c = bot.c
++    conn = bot.conn
++    PREFIX = bot.PREFIX
++
++    @bot.hybrid_command(name="mt", usage=f"{PREFIX}mt", description="Toggle maintenance mode")
++    @is_allowed_user()
++    async def mt(ctx):
++        # Toggle nilai is_mt
++        c.execute("UPDATE maintenance SET is_mt = 1 - is_mt")
++        # Ambil nilai setelah update
++        c.execute("SELECT is_mt FROM maintenance LIMIT 1")
++        row = c.fetchone()
++        # Pastikan data valid
++        if row is not None:
++            status = "️ Maintenance Aktif!" if row[0] == 1 else "✅ Maintenance Nonaktif."
++            await ctx.send(f"```{status}```")
++        else:
++            await ctx.send("```❌ Tidak ada data di tabel maintenance.```")
++        conn.commit()
+*** End Patch
+*** End Patch

@@ -11,6 +11,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         member="(Opsional) Mention user Discord",
         growid="(Opsional) GrowID yang ingin dicari"
     )
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     async def info(ctx,
                    member: discord.User = None,
                    growid: str = None):

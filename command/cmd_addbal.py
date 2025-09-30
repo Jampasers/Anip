@@ -1,4 +1,5 @@
 from discord.ext import commands
+from discord import app_commands
 import discord
 from utils import is_allowed_user
 
@@ -14,6 +15,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}addbal <growid/@user> <amount>",
                         description="Addbal user")
     @is_allowed_user()
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     async def addbal(ctx, target: str, amount: int):
         """Add world lock balance to a user or growID."""
         # Cek jika yang dikasih adalah tag user

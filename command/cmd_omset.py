@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from utils import is_allowed_user, is_maintenance
 from datetime import datetime
+from discord import app_commands
 
 # Tuple of valid period values
 PERIODS = ("today", "week", "month", "total")
@@ -239,6 +240,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}omset",
                         description="Show omset")
     @is_allowed_user()
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     @is_maintenance()
     async def omset(ctx: commands.Context):
         """Tampilkan panel analitik dengan UI interaktif ber-emoji."""

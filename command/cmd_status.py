@@ -1,11 +1,13 @@
 import psutil
 import time
 from discord.ext import commands
+from discord import app_commands
 
 def setup(bot, c, conn, fmt_wl, PREFIX, DB_NAME):
     """Register the status command."""
     start_time = time.time()
 
+    @app_commands.guilds(os.getenv("SERVER_ID"))
     # @bot.command(usage=f"{PREFIX}status")
     @bot.hybrid_command(name="status",
                         usage=f"{PREFIX}status",
