@@ -3,7 +3,7 @@ Discord Bot (Multi-file) with Full UI
 Run this file: python bot_core.py
 """
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import sqlite3
 import re
 from dotenv import load_dotenv
