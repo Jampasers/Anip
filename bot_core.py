@@ -117,20 +117,20 @@ async def auto_allocate_po():
         await allocate_preorders(kode)
 
 
-    # pastikan loop auto allocate start saat bot ready
-    @bot.event
-    async def on_ready():
-        try:
-            guild_id = os.getenv("SERVER_ID")
-            await bot.tree.sync(guild=discord.Object(id=guild_id))
-            print(f"Slash command synced for guild {guild_id}")
-        except Exception as e:
-            print(f"Gagal sync command: {e}")
+# pastikan loop auto allocate start saat bot ready
+@bot.event
+async def on_ready():
+    try:
+        guild_id = os.getenv("SERVER_ID")
+        await bot.tree.sync(guild=discord.Object(id=guild_id))
+        print(f"Slash command synced for guild {guild_id}")
+    except Exception as e:
+        print(f"Gagal sync command: {e}")
 
-        if not auto_allocate_po.is_running():
-            auto_allocate_po.start()
+    if not auto_allocate_po.is_running():
+        auto_allocate_po.start()
 
-        print("[AUTO_ALLOCATE] Loop started")
+    print("[AUTO_ALLOCATE] Loop started")
 
 @bot.event
 async def on_message(message: discord.Message):
