@@ -606,22 +606,22 @@ class StockView(View):
     def __init__(self):
         super().__init__(timeout=300)
         self.add_item(
-            Button(label="BUY", style=discord.ButtonStyle.green, custom_id="buy",
+            Button(label="Buy", style=discord.ButtonStyle.green, custom_id="buy",
                 disabled=self.is_mt())
         )
         self.add_item(
-            Button(label="BUY PO", style=discord.ButtonStyle.green, custom_id="buy_po",
+            Button(label="Buy PO", style=discord.ButtonStyle.green, custom_id="buy_po",
                 disabled=self.is_mt())
         )  # << NEW
         self.add_item(
             Button(
-                label="DEPOSIT", style=discord.ButtonStyle.blurple, custom_id="deposit",
+                label="Deposit", style=discord.ButtonStyle.blurple, custom_id="deposit",
                 disabled=self.is_mt()
             )
         )
         self.add_item(
             Button(
-                label="SET GROWID", style=discord.ButtonStyle.gray, custom_id="growid",
+                label="Set GrowID", style=discord.ButtonStyle.gray, custom_id="growid",
                 disabled=self.is_mt()
             )
         )
@@ -633,6 +633,8 @@ class StockView(View):
                 disabled=self.is_mt()
             )
         )
+
+
 
     def is_mt(self):
         c.execute("SELECT is_mt FROM maintenance LIMIT 1")
@@ -808,6 +810,21 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     async def on_ready():
         if not auto_allocate_po.is_running():
             auto_allocate_po.start()
+
+        c.execute("SELECT channel_id, message_id FROM stock_embed LIMIT 1")
+        row = c.fetchone()
+        if row:
+            ch = bot.get_channel(row[0])
+            if ch:
+                try:
+                    msg = await ch.fetch_message(row[1])
+                    message_cache["channel_id"] = row[0]
+                    message_cache["message"] = msg
+                    if not update_stock.is_running():
+                        update_stock.start()
+                    print("[STOCK EMBED] Loop resumed from DB.")
+                except Exception as e:
+                    print(f"[STOCK EMBED] Gagal fetch message: {e}")
 
         print("[AUTO_ALLOCATE] Loop started")
 

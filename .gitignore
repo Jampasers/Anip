@@ -148,6 +148,9 @@ venv.bak/
 .spyderproject
 .spyproject
 
+# Lua File
+*.lua
+
 # Rope project settings
 .ropeproject
 
