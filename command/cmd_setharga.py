@@ -1,6 +1,7 @@
 from discord.ext import commands
 from utils import is_allowed_user, is_maintenance
 from discord import app_commands
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the setharga command."""

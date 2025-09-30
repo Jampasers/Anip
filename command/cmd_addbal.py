@@ -2,6 +2,7 @@ from discord.ext import commands
 from discord import app_commands
 import discord
 from utils import is_allowed_user
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the addbal command to the bot."""

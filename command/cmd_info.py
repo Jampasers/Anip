@@ -1,6 +1,7 @@
 from discord.ext import commands
 from discord import app_commands
 import discord
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the info command."""

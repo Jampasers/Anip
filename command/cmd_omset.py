@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 from utils import is_allowed_user, is_maintenance
 from datetime import datetime
 from discord import app_commands
+import os
 
 # Tuple of valid period values
 PERIODS = ("today", "week", "month", "total")

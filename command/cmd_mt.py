@@ -1,6 +1,7 @@
 from discord.ext import commands
 from discord import app_commands
 from utils import is_allowed_user
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the maintenance toggle command."""

@@ -2,6 +2,7 @@ import psutil
 import time
 from discord.ext import commands
 from discord import app_commands
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX, DB_NAME):
     """Register the status command."""

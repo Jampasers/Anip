@@ -2,6 +2,7 @@ from discord.ext import commands
 import re
 import shlex
 from utils import is_allowed_user, is_maintenance
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the addstock command, which adds new products or items."""

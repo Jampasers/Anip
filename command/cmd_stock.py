@@ -4,6 +4,7 @@ from discord.ext import commands, tasks
 import datetime
 from ui_views import StockView
 from utils import is_allowed_user, is_maintenance
+import os
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the stock command with auto-update functionality."""
