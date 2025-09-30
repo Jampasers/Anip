@@ -808,7 +808,13 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     # pastikan loop auto allocate start saat bot ready
     @bot.event
     async def on_ready():
-        await bot.tree.sync()
+        try:
+            guild_id = 839981629044555847
+            await bot.tree.sync(guild=discord.Object(id=guild_id))
+            print(f"Slash command synced for guild {guild_id}")
+        except Exception as e:
+            print(f"Gagal sync command: {e}")
+
         if not auto_allocate_po.is_running():
             auto_allocate_po.start()
 
