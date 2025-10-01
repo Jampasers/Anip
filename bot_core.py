@@ -92,16 +92,26 @@ def fmt_wl(x: int) -> str:
         return str(x)
 
 # ===== Load modules =====
-# Dynamically import all Python modules inside the `command` directory and call their setup functions.
+import asyncio
+
 commands_dir = os.path.join(os.path.dirname(__file__), "command")
 for _, module_name, _ in pkgutil.iter_modules([commands_dir]):
     mod = importlib.import_module(f"command.{module_name}")
     if hasattr(mod, "setup"):
+        setup_func = mod.setup
         try:
-            mod.setup(bot, c, conn, fmt_wl, PREFIX)
+            # coba setup gaya lama (pakai DB, fmt_wl, dll)
+            setup_func(bot, c, conn, fmt_wl, PREFIX)
         except TypeError:
-            # Some modules (e.g. cmd_status) require DB_NAME as extra argument
-            mod.setup(bot, c, conn, fmt_wl, PREFIX, DB_NAME)
+            try:
+                setup_func(bot, c, conn, fmt_wl, PREFIX, DB_NAME)
+            except TypeError:
+                # fallback untuk setup gaya baru (async def setup(bot))
+                if asyncio.iscoroutinefunction(setup_func):
+                    asyncio.run(setup_func(bot))
+                else:
+                    print(f"⚠️ Tidak bisa load {module_name}, cek definisi setup()")
+
 
 # Import UI views and initialize last so it can hook listeners
 import ui_views
