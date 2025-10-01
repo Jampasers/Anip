@@ -280,18 +280,12 @@ class BuyModal(Modal, title="Enter Amount"):
         items = c.fetchall()
         c.execute("SELECT balance, poin FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()
-        balance_sekarang = None
-        wl_dari_poin = None
-        sisa_poin = None
-        poin_after = None
 
-        if row:
-            print(row)
-            balance_sekarang, poin_sekarang = row
-            poin_after = poin_sekarang + total
-            wl_dari_poin = poin_after // 5
-            sisa_poin = poin_after % 5
-            c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
+        balance_sekarang, poin_sekarang = row
+        poin_after = poin_sekarang + total
+        wl_dari_poin = poin_after // 5
+        sisa_poin = poin_after % 5
+        c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
               (balance_sekarang + wl_dari_poin, sisa_poin, uid))
 
         ids = [str(x[0]) for x in items]
