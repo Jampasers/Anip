@@ -286,7 +286,16 @@ class BuyModal(Modal, title="Enter Amount"):
         wl_dari_poin = poin_after // 5
         sisa_poin = poin_after % 5
         c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
-              (balance_sekarang + wl_dari_poin, sisa_poin, uid))
+              (balance_sekarang + wl_dari_poin, sisa_poin, uid,))
+
+        conn.commit()
+
+        c.execute("SELECT balance, poin FROM users WHERE user_id = ?", (uid,))
+        row = c.fetchone()
+
+        balance_sekarang, poin_sekarang = row
+
+        print(balance_sekarang + wl_dari_poin, poin_sekarang)
 
         ids = [str(x[0]) for x in items]
         if not ids:
