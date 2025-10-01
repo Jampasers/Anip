@@ -241,19 +241,22 @@ async def auto_allocate_po():
 
 # pastikan loop auto allocate start saat bot ready
 @bot.event
+@bot.event
 async def on_ready():
     try:
-        guild_id = os.getenv("SERVER_ID")
-        # bot.tree.clear_commands(guild=None)
-        await bot.tree.sync(guild=discord.Object(id=guild_id)) #guild=discord.Object(id=guild_id)
-        print(f"Slash command synced for guild {guild_id}")
+        guild_id = int(os.getenv("SERVER_ID"))   # ✅ pastikan int
+        guild = discord.Object(id=guild_id)
+        await bot.tree.sync(guild=guild)         # ✅ sync slash commands
+        print(f"✅ Slash commands synced to guild {guild_id}")
     except Exception as e:
-        print(f"Gagal sync command: {e}")
+        print(f"❌ Gagal sync command: {e}")
 
     if not auto_allocate_po.is_running():
         auto_allocate_po.start()
+        print("[AUTO_ALLOCATE] Loop started")
 
-    print("[AUTO_ALLOCATE] Loop started")
+    print(f"🤖 Bot ready as {bot.user}")
+
 
 @bot.event
 async def on_message(message: discord.Message):

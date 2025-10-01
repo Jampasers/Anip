@@ -8,8 +8,11 @@ import requests
 import json
 
 class RefreshCommand(commands.Cog):
+    def __init__(self, bot: commands.Bot):   # ✅ Constructor
+        self.bot = bot
+
     @app_commands.command(name="refresh", description="Refresh ltoken dari file .txt")
-    @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
+    @app_commands.guilds(discord.Object(int(os.getenv("SERVER_ID"))))
     @is_buyer_ltoken()
     async def refresh(self, interaction: discord.Interaction, file: discord.Attachment):
         await interaction.response.defer(thinking=True)
@@ -45,8 +48,15 @@ class RefreshCommand(commands.Cog):
             resp = requests.post(url, headers=headers, json=payload, timeout=60)
             resp.raise_for_status()
             result = resp.json()
-            return await interaction.followup.send(f"✅ Status: {resp.status_code}\n```json\n{json.dumps(result, indent=2)}```")
+            return await interaction.followup.send(
+                f"✅ Status: {resp.status_code}\n```json\n{json.dumps(result, indent=2)}```"
+            )
         except requests.exceptions.RequestException as e:
             return await interaction.followup.send(f"❌ Gagal request: `{e}`")
         except ValueError:
             return await interaction.followup.send(f"❌ Gagal parse response: `{resp.text}`")
+
+
+# ✅ Tambahkan di paling bawah file
+async def setup(bot: commands.Bot):
+    await bot.add_cog(RefreshCommand(bot))

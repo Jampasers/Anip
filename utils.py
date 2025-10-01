@@ -12,11 +12,13 @@ def is_allowed_user():
         return str(ctx.author.id) in [u for u in ALLOWED_ID]
     return commands.check(predicate)
 
+from discord import app_commands, Interaction
 def is_buyer_ltoken():
     def predicate(interaction: Interaction):
-        role_id = 1422544357160128613
-        return any(role.id == role_id for role in ctx.author.roles)
-    return check(predicate)
+        role_id = 839981629044555853  # ganti dengan role buyer-mu
+        return any(role.id == role_id for role in interaction.user.roles)
+    return app_commands.check(predicate)
+
 
 
 def is_maintenance():
