@@ -1,7 +1,6 @@
 from discord.ext import commands
 from discord import app_commands
 from utils import is_allowed_user
-from utils import is_buyer_ltoken
 import os
 import discord
 import requests
