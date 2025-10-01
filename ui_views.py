@@ -280,6 +280,7 @@ class BuyModal(Modal, title="Enter Amount"):
         items = c.fetchall()
         c.execute("SELECT balance, poin FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()
+        print(row)
         balance_sekarang = None
         wl_dari_poin = None
         sisa_poin = None
