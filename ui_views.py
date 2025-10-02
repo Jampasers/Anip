@@ -312,13 +312,13 @@ class BuyModal(Modal, title="Enter Amount"):
                 f"Balance: {new_balance}\n\n"
                 f"📦 Items:\n{bought_names}```"
             )
+            await self.author.send(msg)
             await self.author.send(
                 f"🔄 Konversi poin selesai!\n"
                 f"+{wl_dari_poin} WL dari poin\n"
                 f"WL Kamu Sekarang: {new_balance + wl_dari_poin}\n"
                 f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
             )
-            await self.author.send(msg)
         except Exception:
             await interaction.followup.send(
                 "❌ DM kamu mati. Pembelian dibatalkan.", ephemeral=True
