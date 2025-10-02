@@ -295,7 +295,7 @@ class BuyModal(Modal, title="Enter Amount"):
 
         balance_sekarang, poin_sekarang = row
 
-        print(balance_sekarang + wl_dari_poin, poin_sekarang)
+        print(balance_sekarang + wl_dari_poin, poin_after)
 
         ids = [str(x[0]) for x in items]
         if not ids:
