@@ -289,15 +289,15 @@ class BuyModal(Modal, title="Enter Amount"):
 
 
 
-        c.execute("SELECT balance, poin FROM users WHERE user_id = ?", (uid,))
+        c.execute("SELECT poin FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()
 
-        balance_sekarang, poin_sekarang = row
+        poin_sekarang = row[0]
         poin_after = poin_sekarang + total
         wl_dari_poin = poin_after // 5
         sisa_poin = poin_after % 5
 
-        new_balance = (balance - total) + wl_dari_poin
+        new_balance = (balance - total)
         await interaction.response.defer(ephemeral=True)
 
         # DM wajib sukses
@@ -315,7 +315,7 @@ class BuyModal(Modal, title="Enter Amount"):
             await self.author.send(
                 f"🔄 Konversi poin selesai!\n"
                 f"+{wl_dari_poin} WL dari poin\n"
-                f"WL Kamu Sekarang: {balance_sekarang + wl_dari_poin}\n"
+                f"WL Kamu Sekarang: {new_balance + wl_dari_poin}\n"
                 f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
             )
             await self.author.send(msg)
@@ -331,7 +331,7 @@ class BuyModal(Modal, title="Enter Amount"):
             ids
         )
         c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
-              (balance_sekarang + wl_dari_poin, sisa_poin, uid,))
+              (new_balance + wl_dari_poin, sisa_poin, uid,))
         
         c.execute(
             "INSERT INTO transactions (user_id, kode, jumlah) VALUES (?, ?, ?)",
