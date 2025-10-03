@@ -9,6 +9,7 @@ import re
 import tempfile
 import asyncio
 from typing import List
+import time
 
 # ---------- CONFIG ----------
 API_URL = os.getenv("REFRESH_API_URL", "http://23.137.105.146:5050/generate_token")
@@ -67,14 +68,14 @@ class RefreshCommand(commands.Cog):
         Input dipisah spasi atau enter. 
         Setiap Gmail akan diproses ke API_URL dengan proxy default.
         """
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(thinking=True)
 
         # parsing input gmails → list
         raw_lines = gmails.replace("\n", " ").split()
         emails = [ln.strip() for ln in raw_lines if EMAIL_RE.match(ln.strip())]
 
         if not emails:
-            return await interaction.followup.send("❌ Tidak ditemukan Gmail valid di input.", ephemeral=True)
+            return await interaction.followup.send("❌ Tidak ditemukan Gmail valid di input.")
 
         headers = {
             "Content-Type": "application/json",
@@ -88,11 +89,12 @@ class RefreshCommand(commands.Cog):
         # progress awal
         masked_first = mask_email(emails[0]) if emails else "—"
         total = len(emails)
+        start_time = time.time()
         progress_msg = await interaction.followup.send(
             f"⏳ Memulai proses refresh `{total}` akun...\n"
             f"Sedang memproses: **{masked_first}**\n"
-            f"Sukses: 0 | Gagal: 0",
-            ephemeral=True,
+            f"Sukses: 0 | Gagal: 0\n"
+            f"Waktu berjalan: 0 detik",
             wait=True
         )
 
@@ -143,13 +145,14 @@ class RefreshCommand(commands.Cog):
 
             # update progress message
             if idx % PROGRESS_UPDATE_EVERY == 0 or idx == total:
+                elapsed = int(time.time() - start_time)
                 try:
                     await progress_msg.edit(content=(
                         f"⏳ Memproses akun {idx}/{total}\n"
                         f"Terakhir diproses: **{masked}**\n\n"
                         f"{status_line}\n\n"
                         f"Sukses: **{success_count}** | Gagal: **{fail_count}**\n"
-                        f"Menunggu selesainya proses..."
+                        f"Waktu berjalan: {elapsed} detik"
                     ))
                 except Exception:
                     pass
@@ -162,7 +165,7 @@ class RefreshCommand(commands.Cog):
             tmp.write("\n".join(results))
             tmp.close()
         except Exception as e:
-            return await interaction.followup.send(f"❌ Gagal membuat file hasil: `{e}`", ephemeral=True)
+            return await interaction.followup.send(f"❌ Gagal membuat file hasil: `{e}`")
 
         # summary
         summary_text = f"✅ Selesai. Total diproses: {total} — Sukses: {success_count}, Gagal: {fail_count}"
@@ -180,15 +183,14 @@ class RefreshCommand(commands.Cog):
 
         try:
             if dm_sent:
-                await interaction.followup.send("✅ Hasil sudah dikirim ke DM kamu.", ephemeral=True)
+                await interaction.followup.send("✅ Hasil sudah dikirim ke DM kamu.")
             else:
                 await interaction.followup.send(
                     content=f"{summary_text}\n⚠️ Gagal kirim DM — hasil dikirim di sini.",
-                    file=discord.File(tmp_path, filename="refreshed_tokens.txt"),
-                    ephemeral=True
+                    file=discord.File(tmp_path, filename="refreshed_tokens.txt")
                 )
         except Exception as e:
-            await interaction.followup.send(f"❌ Gagal mengirim hasil: `{e}`", ephemeral=True)
+            await interaction.followup.send(f"❌ Gagal mengirim hasil: `{e}`")
         finally:
             try:
                 if os.path.exists(tmp_path):
