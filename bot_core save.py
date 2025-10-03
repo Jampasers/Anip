@@ -98,6 +98,7 @@ import cmd_topbal
 import cmd_omset
 import cmd_track
 import cmd_mt
+import cmd_addacc
 import ui_views
 
 TARGET_CHANNEL_ID = 1415979811154821170  # ganti dengan ID channel webhook game
@@ -191,6 +192,7 @@ cmd_topbal.setup(bot, c, conn, fmt_wl, PREFIX)
 cmd_omset.setup(bot, c, conn, fmt_wl, PREFIX)
 cmd_track.setup(bot, c, conn, fmt_wl, PREFIX)
 cmd_mt.setup(bot, c, conn, fmt_wl, PREFIX)
+cmd_addacc.setup(bot. c, conn, fmw_wl, PREFIX)
 
 # UI must be initialized last so it can hook listeners
 ui_views.setup(bot, c, conn, fmt_wl, PREFIX)
