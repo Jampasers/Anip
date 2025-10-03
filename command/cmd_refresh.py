@@ -71,13 +71,14 @@ class RefreshCommand(commands.Cog):
     @app_commands.guilds(discord.Object(int(os.getenv("SERVER_ID"))))
     @is_buyer_ltoken()
     async def refresh(self, interaction: discord.Interaction, gmails: str):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        # response awal → non-ephemeral supaya semua orang bisa lihat
+        await interaction.response.defer(thinking=True)
 
         raw_lines = gmails.replace("\n", " ").split()
         emails = [ln.strip() for ln in raw_lines if EMAIL_RE.match(ln.strip())]
 
         if not emails:
-            return await interaction.followup.send("❌ Tidak ditemukan Gmail valid di input.", ephemeral=True)
+            return await interaction.followup.send("❌ Tidak ditemukan Gmail valid di input.")
 
         headers = {
             "Content-Type": "application/json",
@@ -93,25 +94,24 @@ class RefreshCommand(commands.Cog):
         masked_first = mask_email(emails[0]) if emails else "—"
         start_time = time.time()
 
+        # satu pesan awal
         progress_msg = await interaction.followup.send(
             f"⏳ Memulai proses refresh `{total}` akun...\n"
             f"Sedang memproses: **{masked_first}**\n"
-            f"Sukses: 0 | Gagal: 0 | NotFound: 0",
-            ephemeral=True,
-            wait=True
+            f"Sukses: 0 | Gagal: 0 | NotFound: 0\n"
+            f"Waktu berjalan: 0 detik"
         )
 
+        # loop tiap email
         for idx, email in enumerate(emails, start=1):
             masked = mask_email(email)
 
-            # --- cek DB dulu ---
             if not account_exists(email):
                 results.append(f"{email} | NOT_FOUND")
                 notfound_count += 1
                 status_line = f"❌ Account not found: {masked}"
             else:
                 payload = {"email": email, "proxy": DEFAULT_PROXY}
-
                 try:
                     resp_or_exc, is_exc = await do_post(API_URL, payload, headers, TIMEOUT)
                 except Exception as e:
@@ -152,6 +152,7 @@ class RefreshCommand(commands.Cog):
                                     fail_count += 1
                                     status_line = f"❌ Gagal API untuk {masked}"
 
+            # update progress di 1 pesan
             if idx % PROGRESS_UPDATE_EVERY == 0 or idx == total:
                 elapsed = int(time.time() - start_time)
                 try:
@@ -159,7 +160,9 @@ class RefreshCommand(commands.Cog):
                         f"⏳ Memproses akun {idx}/{total}\n"
                         f"Terakhir diproses: **{masked}**\n\n"
                         f"{status_line}\n\n"
-                        f"Sukses: **{success_count}** | Gagal: **{fail_count}** | NotFound: **{notfound_count}**\n"
+                        f"Sukses: **{success_count}** | "
+                        f"Gagal: **{fail_count}** | "
+                        f"NotFound: **{notfound_count}**\n"
                         f"Waktu berjalan: {elapsed} detik"
                     ))
                 except Exception:
@@ -173,11 +176,12 @@ class RefreshCommand(commands.Cog):
             tmp.write("\n".join(results))
             tmp.close()
         except Exception as e:
-            return await interaction.followup.send(f"❌ Gagal membuat file hasil: `{e}`", ephemeral=True)
+            return await progress_msg.edit(content=f"❌ Gagal membuat file hasil: `{e}`")
 
         summary_text = (
-            f"✅ Selesai. Total diproses: {total} — "
-            f"Sukses: {success_count}, Gagal: {fail_count}, NotFound: {notfound_count}"
+            f"✅ Selesai. Total diproses: {total}\n"
+            f"Sukses: {success_count} | Gagal: {fail_count} | NotFound: {notfound_count}\n"
+            f"Waktu berjalan: {int(time.time() - start_time)} detik"
         )
 
         # DM hasil
@@ -191,14 +195,14 @@ class RefreshCommand(commands.Cog):
         except Exception:
             dm_sent = False
 
+        # Update pesan progress terakhir
         try:
             if dm_sent:
-                await interaction.followup.send("✅ Hasil sudah dikirim ke DM kamu.", ephemeral=True)
+                await progress_msg.edit(content=f"{summary_text}\n✅ Hasil sudah dikirim ke DM kamu.")
             else:
-                await interaction.followup.send(
+                await progress_msg.edit(
                     content=f"{summary_text}\n⚠️ Gagal kirim DM — hasil dikirim di sini.",
-                    file=discord.File(tmp_path, filename="refreshed_tokens.txt"),
-                    ephemeral=True
+                    attachments=[discord.File(tmp_path, filename="refreshed_tokens.txt")]
                 )
         finally:
             try:
