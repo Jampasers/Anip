@@ -17,6 +17,7 @@ import asyncio
 import discord
 import os
 from discord.ui import View, Button, Modal, TextInput, Select
+import time
 
 # ===== Globals (diisi dari setup) =====
 bot = None
@@ -25,7 +26,8 @@ conn = None
 fmt_wl = None
 PREFIX = "!"
 
-
+last_click = {}  # simpan user cooldown {user_id: timestamp}
+COOLDOWN_SECONDS = 10
 
 # ===== Helpers umum =====
 NAME_REGEX = re.compile(r"^[a-z0-9]+$")
@@ -607,7 +609,7 @@ class StockView(View):
         )
         self.add_item(
             Button(label="Buy PO", style=discord.ButtonStyle.green, custom_id="buy_po",
-                disabled=True)
+                disabled=False)
         )  # << NEW
         self.add_item(
             Button(
@@ -679,6 +681,22 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
             return
         cid = interaction.data.get("custom_id", "")
         user = interaction.user
+
+        
+# ====== CEK COOLDOWN ======
+        now = time.time()
+        last = last_click.get(user.id, 0)
+        diff = now - last
+        if diff < COOLDOWN_SECONDS:
+            sisa = int(COOLDOWN_SECONDS - diff)
+            await interaction.response.send_message(
+                f"❌ Tunggu {sisa} detik lagi sebelum menekan tombol lagi.",
+                ephemeral=True,
+            )
+            return
+        # simpan timestamp baru
+        last_click[user.id] = now
+        # ==========================
 
         # BUY (lama)
         if cid == "buy":
