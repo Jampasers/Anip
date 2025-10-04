@@ -9,7 +9,6 @@ import re
 import tempfile
 import asyncio
 from typing import List
-import sqlite3
 import time
 
 # ---------- CONFIG ----------
@@ -21,24 +20,7 @@ DEFAULT_PROXY = os.getenv(
 TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "60"))
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 PROGRESS_UPDATE_EVERY = 1
-DB_PATH = os.getenv("DB_PATH", "discord_sqlite_bot.db")
 # ----------------------------
-
-def account_exists(email: str) -> bool:
-    """Cek apakah email ada di DB"""
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    cur.execute("SELECT 1 FROM accounts WHERE email = ?", (email,))
-    row = cur.fetchone()
-    conn.close()
-    return row is not None
 
 def mask_email(email: str) -> str:
     try:
@@ -71,7 +53,6 @@ class RefreshCommand(commands.Cog):
     @app_commands.guilds(discord.Object(int(os.getenv("SERVER_ID"))))
     @is_buyer_ltoken()
     async def refresh(self, interaction: discord.Interaction, gmails: str):
-        # response awal → non-ephemeral supaya semua orang bisa lihat
         await interaction.response.defer(thinking=True)
 
         raw_lines = gmails.replace("\n", " ").split()
@@ -88,7 +69,6 @@ class RefreshCommand(commands.Cog):
         results: List[str] = []
         success_count = 0
         fail_count = 0
-        notfound_count = 0
 
         total = len(emails)
         masked_first = mask_email(emails[0]) if emails else "—"
@@ -98,7 +78,7 @@ class RefreshCommand(commands.Cog):
         progress_msg = await interaction.followup.send(
             f"⏳ Memulai proses refresh `{total}` akun...\n"
             f"Sedang memproses: **{masked_first}**\n"
-            f"Sukses: 0 | Gagal: 0 | NotFound: 0\n"
+            f"Sukses: 0 | Gagal: 0\n"
             f"Waktu berjalan: 0 detik"
         )
 
@@ -106,53 +86,48 @@ class RefreshCommand(commands.Cog):
         for idx, email in enumerate(emails, start=1):
             masked = mask_email(email)
 
-            if not account_exists(email):
-                results.append(f"{email} | NOT_FOUND")
-                notfound_count += 1
-                status_line = f"❌ Account not found: {masked}"
-            else:
-                payload = {"email": email, "proxy": DEFAULT_PROXY}
-                try:
-                    resp_or_exc, is_exc = await do_post(API_URL, payload, headers, TIMEOUT)
-                except Exception as e:
-                    resp_or_exc = e
-                    is_exc = True
+            payload = {"email": email, "proxy": DEFAULT_PROXY}
+            try:
+                resp_or_exc, is_exc = await do_post(API_URL, payload, headers, TIMEOUT)
+            except Exception as e:
+                resp_or_exc = e
+                is_exc = True
 
-                if is_exc:
+            if is_exc:
+                results.append(email)
+                fail_count += 1
+                status_line = f"❌ Request error untuk {masked}"
+            else:
+                resp = resp_or_exc
+                if resp.status_code != 200:
                     results.append(email)
                     fail_count += 1
-                    status_line = f"❌ Request error untuk {masked}"
+                    status_line = f"❌ HTTP {resp.status_code} untuk {masked}"
                 else:
-                    resp = resp_or_exc
-                    if resp.status_code != 200:
+                    try:
+                        j = resp.json()
+                    except Exception:
                         results.append(email)
                         fail_count += 1
-                        status_line = f"❌ HTTP {resp.status_code} untuk {masked}"
+                        status_line = f"❌ JSON tidak valid untuk {masked}"
                     else:
-                        try:
-                            j = resp.json()
-                        except Exception:
-                            results.append(email)
-                            fail_count += 1
-                            status_line = f"❌ JSON tidak valid untuk {masked}"
+                        if j.get("success") and isinstance(j.get("token"), str) and j.get("token").strip():
+                            token_value = j["token"].strip()
+                            results.append(token_value)
+                            success_count += 1
+                            status_line = f"✅ Berhasil: {masked}"
                         else:
-                            if j.get("success") and isinstance(j.get("token"), str) and j.get("token").strip():
-                                token_value = j["token"].strip()
-                                results.append(token_value)
+                            token_guess = j.get("token") or j.get("data") or j.get("result")
+                            if token_guess and isinstance(token_guess, str) and "|" in token_guess:
+                                results.append(token_guess.strip())
                                 success_count += 1
-                                status_line = f"✅ Berhasil: {masked}"
+                                status_line = f"✅ Berhasil (guessed): {masked}"
                             else:
-                                token_guess = j.get("token") or j.get("data") or j.get("result")
-                                if token_guess and isinstance(token_guess, str) and "|" in token_guess:
-                                    results.append(token_guess.strip())
-                                    success_count += 1
-                                    status_line = f"✅ Berhasil (guessed): {masked}"
-                                else:
-                                    results.append(email)
-                                    fail_count += 1
-                                    status_line = f"❌ Gagal API untuk {masked}"
+                                results.append(email)
+                                fail_count += 1
+                                status_line = f"❌ Gagal API untuk {masked}"
 
-            # update progress di 1 pesan
+            # update progress
             if idx % PROGRESS_UPDATE_EVERY == 0 or idx == total:
                 elapsed = int(time.time() - start_time)
                 try:
@@ -161,8 +136,7 @@ class RefreshCommand(commands.Cog):
                         f"Terakhir diproses: **{masked}**\n\n"
                         f"{status_line}\n\n"
                         f"Sukses: **{success_count}** | "
-                        f"Gagal: **{fail_count}** | "
-                        f"NotFound: **{notfound_count}**\n"
+                        f"Gagal: **{fail_count}**\n"
                         f"Waktu berjalan: {elapsed} detik"
                     ))
                 except Exception:
@@ -180,7 +154,7 @@ class RefreshCommand(commands.Cog):
 
         summary_text = (
             f"✅ Selesai. Total diproses: {total}\n"
-            f"Sukses: {success_count} | Gagal: {fail_count} | NotFound: {notfound_count}\n"
+            f"Sukses: {success_count} | Gagal: {fail_count}\n"
             f"Waktu berjalan: {int(time.time() - start_time)} detik"
         )
 
