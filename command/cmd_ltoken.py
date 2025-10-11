@@ -8,7 +8,7 @@
 #     * Jika accounts langsung ada -> DM buyer + sukses
 #     * Jika masih processing -> simpan pending_orders (status=PENDING), tampil ⏳ Processing
 # - Background monitor:
-#     * start via on_ready (bukan di setup) -> aman di discord.py v2
+#     * start via on_ready (di bot_core) -> aman di discord.py v2
 #     * loop tanpa timeout, cek /getOrder
 #     * fallback ke /getOrders bila /getOrder lambat update
 #     * kalau Success + accounts -> DM buyer & mark SUCCESS
@@ -28,11 +28,11 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 # ----------------------------------
-# KONFIG
+# KONFIG (NILAI DIAMBIL DARI FILE YANG ANDA BERIKAN)
 # ----------------------------------
-API_KEY: str = "b095e061b5a809bd5336329a27bf81cb"
-BASE_URL: str = "https://cid.surferwallet.net/publicApi"
-SELL_PRICE_WL: int = 26            # harga jual fix
+API_KEY: str = "6f54c300286ece6ad5d0ff172d38d8c3" # <--- API KEY Anda
+BASE_URL: str = "https://cid.surferwallet.net/publicApi" # <--- BASE URL Anda
+SELL_PRICE_WL: int = 27            # harga jual fix
 MONITOR_INTERVAL_SEC: int = 5      # interval monitor pending (realtime, bisa 3-5 detik)
 GUILD_ID_ENV = "SERVER_ID"         # untuk @app_commands.guilds
 
@@ -51,11 +51,12 @@ def log_debug(msg: str) -> None:
     print(f"[DEBUG][ltoken] {msg}")
 
 # ======================================================================================
-# DB SCHEMA ENSURE
+# DB SCHEMA ENSURE (Dipertahankan di sini untuk memastikan, walau sudah ada di bot_core)
 # ======================================================================================
 def ensure_schema(c, conn) -> None:
     """Pastikan tabel yang diperlukan ada."""
     log_debug("[DB] Ensuring required tables exist...")
+    # Tabel users
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -65,6 +66,7 @@ def ensure_schema(c, conn) -> None:
         )
         """
     )
+    # Tabel deposit
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS deposit (
@@ -115,32 +117,42 @@ async def http_get_json(url: str, *,
     """GET -> JSON (bisa pakai params atau JSON body jika server nerima)."""
     log_debug(f"[HTTP][GET] {url} params={params} body={json_body}")
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params, json=json_body, headers=headers) as resp:
-            status = resp.status
-            try:
-                data = await resp.json(content_type=None)
-            except Exception:
-                text = await resp.text()
-                log_debug(f"[HTTP][GET][{status}] Non-JSON: {text[:500]}")
-                return {}
-            log_debug(f"[HTTP][GET][{status}] {str(data)[:900]}")
-            return data
+        # Menghapus SSL:default error saat mencoba localhost:8080 dengan menambahkan aiohttp.TCPConnector(ssl=False)
+        # Tapi karena sekarang pakai BASE_URL HTTPS yang benar, kita kembalikan normal
+        try:
+            async with session.get(url, params=params, json=json_body, headers=headers, timeout=10) as resp:
+                status = resp.status
+                try:
+                    data = await resp.json(content_type=None)
+                except Exception:
+                    text = await resp.text()
+                    log_debug(f"[HTTP][GET][{status}] Non-JSON: {text[:500]}")
+                    return {}
+                log_debug(f"[HTTP][GET][{status}] {str(data)[:900]}")
+                return data
+        except aiohttp.ClientConnectorError as e:
+             log_debug(f"[HTTP][GET] Connection Error: {e}")
+             raise e # Lempar error koneksi agar monitor loop bisa menangkap
 
 async def http_post_json(url: str, *, payload: Dict[str, Any],
                          headers: Optional[Dict[str, str]] = None) -> Any:
     """POST -> JSON"""
     log_debug(f"[HTTP][POST] {url} payload={payload}")
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as resp:
-            status = resp.status
-            try:
-                data = await resp.json(content_type=None)
-            except Exception:
-                text = await resp.text()
-                log_debug(f"[HTTP][POST][{status}] Non-JSON: {text[:500]}")
-                return {}
-            log_debug(f"[HTTP][POST][{status}] {str(data)[:900]}")
-            return data
+        try:
+            async with session.post(url, json=payload, headers=headers, timeout=10) as resp:
+                status = resp.status
+                try:
+                    data = await resp.json(content_type=None)
+                except Exception:
+                    text = await resp.text()
+                    log_debug(f"[HTTP][POST][{status}] Non-JSON: {text[:500]}")
+                    return {}
+                log_debug(f"[HTTP][POST][{status}] {str(data)[:900]}")
+                return data
+        except aiohttp.ClientConnectorError as e:
+            log_debug(f"[HTTP][POST] Connection Error: {e}")
+            raise e # Lempar error koneksi agar modal/purchase bisa menangkap
 
 # ======================================================================================
 # API WRAPPERS
@@ -171,24 +183,25 @@ async def api_get_order(order_id: str) -> Dict[str, Any]:
     """Cek status order by ID. Urutan: GET query -> GET+body -> POST+body."""
     url = f"{BASE_URL}/getOrder"
 
-    # 1) GET query
+    # 1) GET query (paling umum)
     data = await http_get_json(url, params={"apikey": API_KEY, "orderID": order_id})
     if isinstance(data, dict) and data:
         if ("status" in data) or ("accounts" in data) or ("success" in data) or ("processing" in data):
             return data
+    
+    # 2) POST + JSON body (paling reliable)
+    data = await http_post_json(url, payload={"apikey": API_KEY, "orderID": order_id},
+                                headers={"Content-Type": "application/json"})
+    if isinstance(data, dict):
+        return data
 
-    # 2) GET + JSON body
+    # 3) GET + JSON body (jarang, tapi dipertahankan dari file Anda)
     data = await http_get_json(url, json_body={"apikey": API_KEY, "orderID": order_id},
                                headers={"Content-Type": "application/json"})
     if isinstance(data, dict) and data:
         if ("status" in data) or ("accounts" in data) or ("success" in data) or ("processing" in data):
             return data
-
-    # 3) POST + JSON body
-    data = await http_post_json(url, payload={"apikey": API_KEY, "orderID": order_id},
-                                headers={"Content-Type": "application/json"})
-    if isinstance(data, dict):
-        return data
+    
     return {}
 
 async def api_get_orders() -> Any:
@@ -221,12 +234,12 @@ def format_accounts_dm(product_name: str, qty: int, total: int, accounts: List[D
     for acc in accounts:
         # Field yang umum di getOrder real: name, token, rid, vid, mac, wk
         rows.append(
-            f"\n👤 GrowID   : `{acc.get('name')}`\n"
-            f"🔑 Token    : `{acc.get('token')}`\n"
-            f"📧 RID      : `{acc.get('rid')}`\n"
-            f"🆔 VID      : `{acc.get('vid')}`\n"
-            f"🔧 MAC      : `{acc.get('mac')}`\n"
-            f"🔩 WK       : `{acc.get('wk')}`\n"
+            f"\n👤 GrowID   : `{acc.get('name') or acc.get('growid', 'N/A')}`\n"
+            f"🔑 Token    : `{acc.get('token') or acc.get('ltoken', 'N/A')}`\n"
+            f"📧 RID      : `{acc.get('rid', 'N/A')}`\n"
+            f"🆔 VID      : `{acc.get('vid', 'N/A')}`\n"
+            f"🔧 MAC      : `{acc.get('mac', 'N/A')}`\n"
+            f"🔩 WK       : `{acc.get('wk', 'N/A')}`\n"
             "────────────────────────────"
         )
     tail = "\n⚠️ Keep your credentials safe."
@@ -235,7 +248,7 @@ def format_accounts_dm(product_name: str, qty: int, total: int, accounts: List[D
 # ======================================================================================
 # RENDER EMBED
 # ======================================================================================
-def render_stock_embed(products: List[Dict[str, Any]], balance_web: int) -> discord.Embed:
+def render_stock_embed(products: List[Dict[str, Any]], balance_web: int, fmt_wl) -> discord.Embed:
     title = f"{EMO_EXCLAMATION} LTOKEN PRODUCT LIST {EMO_EXCLAMATION}"
     embed = discord.Embed(title=title, color=discord.Color.red())
     embed.set_footer(text=f" Last Update: {now_str()}")
@@ -247,14 +260,16 @@ def render_stock_embed(products: List[Dict[str, Any]], balance_web: int) -> disc
             log_debug(f"[RENDER] Skip 'Old Account': {name}")
             continue
         instock = safe_int(p.get("instock", 0))
-        stock_real = min(instock, balance_web // SELL_PRICE_WL) if SELL_PRICE_WL > 0 else instock
+        # Logika: stock_real adalah batas terkecil antara (stok dari web) atau (jumlah yang bisa dibeli dengan saldo web)
+        stock_can_buy = balance_web // SELL_PRICE_WL if SELL_PRICE_WL > 0 else instock
+        stock_real = min(instock, stock_can_buy) 
 
         block = (
             f"{EMO_TOA}  {name}\n"
-            f"{EMO_PANAH}  Stock Web: {instock}\n"
+            f"{EMO_PANAH}  Stock Web: {fmt_wl(instock)}\n"
             f"{EMO_PANAH}  Price: {SELL_PRICE_WL} {EMO_WL}\n"
-            f"{EMO_PANAH}  Your Available Stock: {stock_real}\n"
-            f"{EMO_PANAH}  Your Web Balance: {balance_web} {EMO_WL}"
+            f"{EMO_PANAH}  Your Available Stock: {fmt_wl(stock_real)}\n"
+            f"{EMO_PANAH}  Your Web Balance: {fmt_wl(balance_web)} {EMO_WL}"
         )
         blocks.append(block)
 
@@ -327,7 +342,26 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
         log_debug(f"[ORDER] Balance cut user={uid} old={balance_db} new={new_balance} total={total}")
 
         # 5) Purchase
-        result = await api_purchase(self.product_name, qty)
+        result = {}
+        try:
+            # Gunakan API yang benar
+            result = await api_purchase(self.product_name, qty)
+        except aiohttp.ClientConnectorError:
+            # Jika koneksi gagal, langsung rollback dan beri tahu user
+            self.c.execute("UPDATE users SET balance=? WHERE user_id=?", (balance_db, uid))
+            self.conn.commit()
+            log_debug(f"[ORDER] Purchase failed due to connection error. Rollback user={uid}")
+            await interaction.response.send_message(
+                "❌ Purchase failed: Could not connect to API server. Please try again later.", ephemeral=True)
+            return
+        except Exception as e:
+            self.c.execute("UPDATE users SET balance=? WHERE user_id=?", (balance_db, uid))
+            self.conn.commit()
+            log_debug(f"[ORDER] Purchase failed due to unknown API error: {e}. Rollback user={uid}")
+            await interaction.response.send_message(
+                f"❌ Purchase failed: Unknown API error ({e.__class__.__name__}). Rollback.", ephemeral=True)
+            return
+
         log_debug(f"[PURCHASE] resp={result}")
 
         order_id = str(result.get("orderID") or result.get("orderId") or "").strip()
@@ -372,7 +406,7 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
                 # Invalid; rollback
                 self.c.execute("UPDATE users SET balance=? WHERE user_id=?", (balance_db, uid))
                 self.conn.commit()
-                await interaction.response.send_message("❌ Purchase failed: Invalid order state.", ephemeral=True)
+                await interaction.response.send_message("❌ Purchase failed: Invalid order state (No order ID from API).", ephemeral=True)
                 return
 
             # simpan ke pending_orders
@@ -414,11 +448,12 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
         log_debug(f"[ORDER] Failed; rollback user={uid} reason={err_msg}")
 
 class StockView(View):
-    def __init__(self, products: List[Dict[str, Any]], c, conn, requester_id: int):
+    def __init__(self, products: List[Dict[str, Any]], c, conn, requester_id: int, fmt_wl):
         super().__init__(timeout=None)
         self.c = c
         self.conn = conn
         self.requester_id = requester_id
+        self.fmt_wl = fmt_wl
         # Dropdown pilih produk
         self.add_item(ProductSelect(products, c, conn))
 
@@ -429,7 +464,7 @@ class StockView(View):
         row = self.c.fetchone()
         bal = int(row[0]) if row else 0
         emb = discord.Embed(title="💰 Your Balance", color=discord.Color.blurple())
-        emb.add_field(name="Balance", value=f"{bal} {EMO_WL}")
+        emb.add_field(name="Balance", value=f"{self.fmt_wl(bal)} {EMO_WL}")
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
     @discord.ui.button(label="🌍 Deposit World", style=discord.ButtonStyle.gray, row=1)
@@ -446,22 +481,19 @@ class StockView(View):
             await interaction.response.send_message("⚠️ Deposit info belum diatur.", ephemeral=True)
 
 # ======================================================================================
-# MONITOR BACKGROUND
+# MONITOR BACKGROUND (Fungsi ini dipanggil oleh bot_core.py)
 # ======================================================================================
 async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
     """
     Cek pending_orders tanpa timeout:
       - getOrder prioritas
       - fallback getOrders kalau getOrder kosong
-      - status:
-          * success + accounts -> DM, mark SUCCESS (orders dan pending_orders)
-          * failed             -> rollback saldo, mark FAILED
-          * processing         -> lanjut tunggu
     """
     await bot.wait_until_ready()
     log_debug("[MONITOR] Started pending orders loop.")
     while not bot.is_closed():
         try:
+            # Gunakan c, conn yang dilewatkan
             c.execute(
                 "SELECT order_id, user_id, product_name, qty, total, balance_before FROM pending_orders WHERE status=?",
                 ("PENDING",)
@@ -477,29 +509,33 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
             for (order_id, user_id, product_name, qty, total, balance_before) in pendings:
                 log_debug(f"[MONITOR] Checking order_id={order_id} user_id={user_id}")
                 data = {}
+                # Inisiasi data dengan status "PROCESSING" agar tidak dianggap gagal
+                status_lower = "processing" 
+                
                 try:
                     data = await api_get_order(order_id)
+                    status_lower = str(data.get("status", status_lower)).lower()
+                    accounts = data.get("accounts", []) or []
+                    processing_flag = bool(data.get("processing", False))
                 except Exception as e:
-                    log_debug(f"[MONITOR] getOrder error {order_id}: {e}")
+                    # Exception di sini menangkap aiohttp.ClientConnectorError (koneksi)
+                    log_debug(f"[MONITOR] getOrder error {order_id}: {e.__class__.__name__}: {e}. Retrying next loop.")
+                    continue # Langsung ke order berikutnya atau loop berikutnya
 
-                status_lower = str(data.get("status", "")).lower()
-                accounts = data.get("accounts", []) or []
-                processing_flag = bool(data.get("processing", False))
-
-                # Jika masih processing
+                # Jika masih processing (status dari API)
                 if processing_flag or "processing" in status_lower:
                     log_debug(f"[MONITOR] order_id={order_id} still processing...")
-                    # coba fallback getOrders; kadang di sini sudah success
+                    # Coba fallback getOrders (hanya jika diperlukan)
                     if fallback_orders_cache is None:
                         try:
                             fallback_orders_cache = await api_get_orders()
                         except Exception as e:
-                            log_debug(f"[MONITOR] getOrders error: {e}")
+                            log_debug(f"[MONITOR] getOrders error: {e.__class__.__name__}: {e}")
                             fallback_orders_cache = None
                     if isinstance(fallback_orders_cache, list):
                         match = next((o for o in fallback_orders_cache if str(o.get("orderID")) == str(order_id)), None)
                         if match:
-                            status_lower = str(match.get("status", "")).lower()
+                            status_lower = str(match.get("status", status_lower)).lower()
                             accounts = match.get("accounts", []) or []
                             log_debug(f"[MONITOR] Fallback getOrders matched: status={status_lower}, accounts={len(accounts)}")
 
@@ -550,6 +586,7 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
             log_debug(f"[MONITOR] Loop error: {e}")
             await asyncio.sleep(MONITOR_INTERVAL_SEC)
 
+
 # ======================================================================================
 # COMMANDS
 # ======================================================================================
@@ -567,12 +604,9 @@ def _guild_obj_from_env() -> Optional[discord.Object]:
         return None
     return None
 
-def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
+def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None): # <-- SETUP FIX
     """
     Entry point yang akan dipanggil dari bot_core.py
-    - Register command
-    - Ensure schema
-    - Start monitor via on_ready (1x)
     """
     ensure_schema(c, conn)
 
@@ -585,19 +619,33 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
     @app_commands.guilds(_guild_obj_from_env() or discord.Object(0))
     async def ltokenstock(ctx: commands.Context):
         # Ambil products & balance web
-        data = await api_get_products()
-        products = _extract_products(data)
-        balance_web = await api_get_balance_web()
+        data = {}
+        balance_web = 0
+        try:
+            data = await api_get_products()
+            balance_web = await api_get_balance_web()
+        except aiohttp.ClientConnectorError:
+             await ctx.reply("❌ **ERROR**: Gagal terhubung ke API LToken. Cek BASE_URL/koneksi.", ephemeral=True, mention_author=False)
+             return
 
+        products = _extract_products(data)
+        
         # Render dan send
-        embed = render_stock_embed(products, balance_web)
-        await ctx.send(embed=embed, view=StockView(products, c, conn, ctx.author.id))
+        embed = render_stock_embed(products, balance_web, fmt_wl)
+        await ctx.send(embed=embed, view=StockView(products, c, conn, ctx.author.id, fmt_wl))
 
     # -------------- COMMAND: order <id> --------------
     @bot.command(name="order", help="Check order status by ID (usage: !order <order_id>)")
     async def order_status(ctx: commands.Context, order_id: str):
         await ctx.trigger_typing()
-        data = await api_get_order(order_id)
+        
+        data = {}
+        try:
+            data = await api_get_order(order_id)
+        except aiohttp.ClientConnectorError:
+             await ctx.reply("❌ **ERROR**: Gagal terhubung ke API LToken. Cek BASE_URL/koneksi.", mention_author=False)
+             return
+
         status = str(data.get("status", "Unknown"))
         success = data.get("success", False)
         quantity = safe_int(data.get("quantity", 0))
@@ -620,13 +668,13 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
             if accounts:
                 emb.add_field(name="Info", value="✅ Accounts are ready. Check your DMs.", inline=False)
             else:
-                emb.add_field(name="Info", value="⚠️ Success without accounts payload yet.", inline=False)
+                emb.add_field(name="Info", value="⚠️ Success without accounts payload yet. Monitor is checking.", inline=False)
         elif "fail" in status.lower():
             emb.add_field(name="Status", value="❌ FAILED", inline=False)
         elif "process" in status.lower():
             emb.add_field(name="Status", value=f"⏳ {status_up}", inline=False)
         else:
-            emb.add_field(name="Status", value=f"⏳ {status_up}", inline=False)
+            emb.add_field(name="Status", value=f"❓ {status_up}", inline=False) # Unknown status
 
         await ctx.reply(embed=emb, mention_author=False)
 
@@ -651,7 +699,7 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
         lines = []
         for (order_id, product_name, qty, unit_price, total, status, created_at) in rows:
             lines.append(
-                f"**#{order_id}** • {product_name} x{qty} • {total} {EMO_WL} • {status} • {created_at}"
+                f"**#{order_id}** • {product_name} x{qty} • {fmt_wl(total)} {EMO_WL} • {status} • {created_at.split('.')[0]}" # format WL dan hilangkan milidetik
             )
 
         emb = discord.Embed(title="🧾 Your Recent Orders", color=discord.Color.blue(),
@@ -659,7 +707,6 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
         await ctx.reply(embed=emb, mention_author=False)
 
     # -------------- COMMAND: setdeposit (admin only) --------------
-    # optional: hanya jika mau atur deposit via command. Boleh dihapus kalau tidak dibutuhkan.
     @bot.command(name="setdeposit", help="Set deposit world & bot name (admin only)")
     @commands.has_permissions(administrator=True)
     async def setdeposit(ctx: commands.Context, world: str, botname: str):
@@ -668,21 +715,5 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
         conn.commit()
         await ctx.reply(f"✅ Deposit updated.\nWorld: **{world}**\nBot: **{botname}**", mention_author=False)
 
-    # -------------- on_ready: start monitor once --------------
-    # ===== Background Task untuk cek order pending =====
-async def monitor_pending_orders(bot, c, conn):
-    await bot.wait_until_ready()
-    while not bot.is_closed():
-        # cek pending order di DB
-        # panggil API getOrder
-        # update status jadi SUCCESS/FAILED
-        # DM buyer kalau success
-        await asyncio.sleep(10)
-
-def start_monitor(bot, c, conn):
-    """Dipanggil dari bot_core biar monitor jalan"""
-    import asyncio
-    if not hasattr(bot, "ltoken_monitor_started"):
-        bot.ltoken_monitor_started = True
-        asyncio.create_task(monitor_pending_orders(bot, c, conn))
-        print("[DEBUG][ltoken] monitor_pending_orders loop started")
+    # Catatan: Tidak perlu ada fungsi monitor_pending_orders atau start_monitor di sini.
+    # Itu sudah diurus oleh bot_core.py yang memanggil monitor_pending_orders_loop.

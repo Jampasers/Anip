@@ -11,8 +11,7 @@ import os
 import importlib
 import pkgutil
 from command import cmd_ltoken
-
-
+import asyncio # WAJIB: Import asyncio untuk create_task()
 
 load_dotenv()
 
@@ -42,7 +41,7 @@ c.execute(
 try:
     c.execute("ALTER TABLE users ADD COLUMN poin INTEGER DEFAULT 0")
 except sqlite3.OperationalError:
-    pass  # kalau udah ada, abaikan
+    pass
 
 try:
     c.execute("ALTER TABLE users ADD COLUMN user_id INTEGER")
@@ -57,6 +56,56 @@ c.execute(
 c.execute("INSERT OR IGNORE INTO maintenance (rowid, is_mt) VALUES (1, 0)")
 c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id)")
 conn.commit()
+
+# --- TAMBAHAN WAJIB untuk LToken dan Preorder (DITAMBAHKAN KEMBALI) ---
+c.execute(
+    """CREATE TABLE IF NOT EXISTS orders (
+    order_id TEXT PRIMARY KEY,
+    user_id INTEGER,
+    product_name TEXT,
+    qty INTEGER,
+    total INTEGER,
+    status TEXT,
+    created_at TEXT
+)"""
+)
+c.execute(
+    """CREATE TABLE IF NOT EXISTS pending_orders (
+    order_id TEXT PRIMARY KEY, 
+    user_id INTEGER,
+    product_name TEXT,
+    qty INTEGER,
+    total INTEGER,
+    balance_before INTEGER,
+    status TEXT DEFAULT 'PENDING'
+)"""
+)
+c.execute(
+    """CREATE TABLE IF NOT EXISTS deposit (
+    world TEXT,
+    bot TEXT
+)"""
+)
+c.execute( 
+    """CREATE TABLE IF NOT EXISTS preorders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    nama TEXT,
+    kode TEXT,
+    amount INTEGER,
+    status TEXT DEFAULT 'waiting',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)"""
+)
+c.execute(
+    """CREATE TABLE IF NOT EXISTS preorder_items (
+    preorder_id INTEGER,
+    nama_barang TEXT
+)"""
+)
+# --- AKHIR TAMBAHAN WAJIB ---
+
+
 c.execute(
     """CREATE TABLE IF NOT EXISTS stock (
     kode TEXT PRIMARY KEY,
@@ -94,19 +143,18 @@ def fmt_wl(x: int) -> str:
     except Exception:
         return str(x)
 
-# ===== Load modules =====
-import asyncio
-
+# ===== Load modules (Logic loader Anda dipertahankan) =====
 commands_dir = os.path.join(os.path.dirname(__file__), "command")
 for _, module_name, _ in pkgutil.iter_modules([commands_dir]):
     mod = importlib.import_module(f"command.{module_name}")
     if hasattr(mod, "setup"):
         setup_func = mod.setup
         try:
-            # coba setup gaya lama (pakai DB, fmt_wl, dll)
+            # coba setup gaya lama (pakai DB, fmt_wl, dll) - 5 argumen
             setup_func(bot, c, conn, fmt_wl, PREFIX)
         except TypeError:
             try:
+                # coba setup gaya 6 argumen (untuk cmd_status dll)
                 setup_func(bot, c, conn, fmt_wl, PREFIX, DB_NAME)
             except TypeError:
                 # fallback untuk setup gaya baru (async def setup(bot))
@@ -129,11 +177,8 @@ TARGET_CHANNEL_ID = 1415979811154821170  # ganti dengan ID channel webhook game
 async def allocate_preorders(kode: str):
     """
     Jalankan fungsi ini SETIAP kali stok untuk `kode` ditambahkan (restock).
-    - Ambil daftar PO waiting (FIFO).
-    - Ambil item dari stock_items sesuai jatah user.
-    - Kirim DM struk. Kalau DM gagal -> cancel PO & lanjut.
-    - Partial fulfill: kalau stok habis di tengah, sisa amount tetap waiting.
     """
+    # ... (Isi fungsi allocate_preorders tetap sama) ...
     # Hitung stok dulu
     c.execute("SELECT COUNT(*) FROM stock_items WHERE kode=?", (kode,))
     stock_available = int(c.fetchone()[0] or 0)
@@ -254,12 +299,11 @@ async def auto_allocate_po():
 
 # pastikan loop auto allocate start saat bot ready
 @bot.event
-@bot.event
 async def on_ready():
     try:
-        guild_id = int(os.getenv("SERVER_ID"))   # ✅ pastikan int
+        guild_id = int(os.getenv("SERVER_ID"))
         guild = discord.Object(id=guild_id)
-        await bot.tree.sync(guild=guild)         # ✅ sync slash commands
+        await bot.tree.sync(guild=guild)
         print(f"✅ Slash commands synced to guild {guild_id}")
     except Exception as e:
         print(f"❌ Gagal sync command: {e}")
@@ -269,15 +313,14 @@ async def on_ready():
         print("[AUTO_ALLOCATE] Loop started")
 
     print(f"🤖 Bot ready as {bot.user}")
-    from command import cmd_ltoken
-# This code snippet is checking if the attribute `ltoken_monitor_started` is not already present in
-# the `bot` object. If it's not present, it sets `bot.ltoken_monitor_started` to `True` and then
-# starts an asynchronous task using `asyncio.create_task()` to run the `monitor_pending_orders_loop`
-# function from the `cmd_ltoken` module.
+    
+    # --- PERBAIKAN MONITOR LTOKEN DI SINI (Memulai monitor LToken dengan benar) ---
     if not hasattr(bot, "ltoken_monitor_started"):
+        # cmd_ltoken sudah diimport di atas, bisa dipanggil langsung.
+        asyncio.create_task(cmd_ltoken.monitor_pending_orders_loop(bot, c, conn))
         bot.ltoken_monitor_started = True
-        print("[DEBUG][ltoken] monitor_pending_orders_loop started")
-
+        print("[DEBUG][ltoken] monitor_pending_orders_loop started successfully.")
+    # --- AKHIR PERBAIKAN MONITOR ---
 
 
 @bot.event
