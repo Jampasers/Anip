@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 import os
 import importlib
 import pkgutil
+from command import cmd_ltoken
+
+
 
 load_dotenv()
 
@@ -266,6 +269,15 @@ async def on_ready():
         print("[AUTO_ALLOCATE] Loop started")
 
     print(f"🤖 Bot ready as {bot.user}")
+    from command import cmd_ltoken
+# This code snippet is checking if the attribute `ltoken_monitor_started` is not already present in
+# the `bot` object. If it's not present, it sets `bot.ltoken_monitor_started` to `True` and then
+# starts an asynchronous task using `asyncio.create_task()` to run the `monitor_pending_orders_loop`
+# function from the `cmd_ltoken` module.
+    if not hasattr(bot, "ltoken_monitor_started"):
+        bot.ltoken_monitor_started = True
+        print("[DEBUG][ltoken] monitor_pending_orders_loop started")
+
 
 
 @bot.event
