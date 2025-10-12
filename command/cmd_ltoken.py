@@ -311,10 +311,8 @@ def render_stock_embed(products: List[Dict[str, Any]], balance_web: int, fmt_wl)
 
         block = (
             f"{EMO_TOA}  {name}\n"
-            f"{EMO_PANAH}  Stock Web: {fmt_wl(instock)}\n"
             f"{EMO_PANAH}  Price: {SELL_PRICE_WL} {EMO_WL}\n"
             f"{EMO_PANAH}  Your Available Stock: {fmt_wl(stock_real)}\n"
-            f"{EMO_PANAH}  Your Web Balance: {fmt_wl(balance_web)} {EMO_WL}"
         )
         blocks.append(block)
 
