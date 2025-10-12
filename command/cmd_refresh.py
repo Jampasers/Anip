@@ -1,189 +1,266 @@
-# refresh_cog.py
+# ================================================================
+# refresh_cog.py — FINAL FULL VERSION (🔥 Ultra Complete)
+# ================================================================
+# FUNGSI UTAMA:
+# /refresh (upload file .txt)
+# - Membaca setiap baris token dari file upload
+# - Tiap token → refresh via SurferCID API resmi
+# - Potong saldo user 1 WL per token
+# - Jika gagal refresh → rollback 1 WL
+# - Jika saldo tidak cukup → token di-skip
+# - Hasil dikirim ke DM:
+#     refreshed_success.txt = token berhasil
+#     refreshed_failed.txt  = token gagal / saldo kurang
+# ================================================================
+
 from discord.ext import commands
 from discord import app_commands
-from utils import is_buyer_ltoken
-import os
 import discord
-import requests
-import re
-import tempfile
+import os
+import sqlite3
 import asyncio
-from typing import List
-import time
+from typing import List, Tuple
+import tempfile
 
-# ---------- CONFIG ----------
-API_URL = os.getenv("REFRESH_API_URL", "http://23.137.105.146:5050/generate_token")
-DEFAULT_PROXY = os.getenv(
-    "DEFAULT_PROXY",
-    "growtechcentral.com:10000:f44c5d7bf63ce6d4d4ab:c98f897ffef305b0"
-)
-TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "60"))
-EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
-PROGRESS_UPDATE_EVERY = 1
-# ----------------------------
+# SurferCID resmi
+from surfercid import SurferCIDClient
+from surfercid.models import LTokenAccount
 
-def mask_email(email: str) -> str:
+# ================================================================
+# KONFIGURASI ENVIRONMENT
+# ================================================================
+SURFERCID_API_KEY = os.getenv("SURFERCID_API_KEY") or os.getenv("LTOKEN_API_KEY") or ""
+DB_PATH = os.getenv("DB_PATH", "discord_sqlite_bot.db")
+MAX_WORKERS = int(os.getenv("REFRESH_MAX_WORKERS", "5"))
+SERVER_ID = int(os.getenv("SERVER_ID") or "0")
+
+# ================================================================
+# DATABASE UTILITIES
+# ================================================================
+def db_connect():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def db_get_user_balance(conn: sqlite3.Connection, user_id: int) -> int:
+    cur = conn.cursor()
+    cur.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+def db_debit(conn: sqlite3.Connection, user_id: int, amount: int) -> bool:
+    """Kurangi saldo user; return True jika berhasil, False jika saldo kurang."""
+    cur = conn.cursor()
+    cur.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    bal = int(row[0]) if row and row[0] is not None else 0
+    if bal < amount:
+        return False
+    new_bal = bal - amount
+    cur.execute("UPDATE users SET balance=? WHERE user_id=?", (new_bal, user_id))
+    conn.commit()
+    return True
+
+def db_credit(conn: sqlite3.Connection, user_id: int, amount: int):
+    """Rollback saldo user."""
+    cur = conn.cursor()
+    cur.execute("SELECT balance FROM users WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    bal = int(row[0]) if row and row[0] is not None else 0
+    cur.execute("UPDATE users SET balance=? WHERE user_id=?", (bal + amount, user_id))
+    conn.commit()
+
+# ================================================================
+# WORKER UNTUK REFRESH TOKEN
+# ================================================================
+def _refresh_one_token(token_str: str, api_key: str) -> Tuple[bool, str]:
+    """
+    Jalankan refresh 1 token.
+    Return:
+      (True, refreshed_token)   jika sukses
+      (False, original_token)   jika gagal
+    """
+    token_str = token_str.strip()
+    if not token_str:
+        return False, "EMPTY_LINE"
+
     try:
-        local, domain = email.split("@", 1)
+        account = LTokenAccount.from_format(token_str)
+        client = SurferCIDClient(api_key=api_key)
+        refreshed = client.refresh_token(account)
+        return True, refreshed.to_format()
     except Exception:
-        return "****@****"
-    return local[0] + "*" * (len(local) - 1) + "@" + domain
+        return False, token_str
 
-async def do_post(api_url: str, payload: dict, headers: dict, timeout: int):
-    def _sync_post():
-        return requests.post(api_url, headers=headers, json=payload, timeout=timeout)
-
-    try:
-        resp = await asyncio.to_thread(_sync_post)
-        return resp, False
-    except Exception as e:
-        return e, True
-
-class RefreshCommand(commands.Cog):
+# ================================================================
+# MAIN CLASS COG
+# ================================================================
+class RefreshFileCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @app_commands.command(
         name="refresh",
-        description="Masukkan daftar Gmail (dipisah spasi/enter). Hasil dikirim ke DM buyer."
+        description="Upload file .txt berisi token (1 token per baris) untuk di-refresh."
     )
-    @app_commands.describe(
-        gmails="Daftar Gmail, contoh: akun1@gmail.com akun2@gmail.com akun3@gmail.com"
-    )
-    @app_commands.guilds(discord.Object(int(os.getenv("SERVER_ID"))))
-    @is_buyer_ltoken()
-    async def refresh(self, interaction: discord.Interaction, gmails: str):
+    @app_commands.describe(file="File .txt berisi token")
+    @app_commands.guilds(discord.Object(SERVER_ID) if SERVER_ID else None)
+    async def refresh(self, interaction: discord.Interaction, file: discord.Attachment):
+        """Handler utama untuk perintah /refresh"""
+        if not SURFERCID_API_KEY:
+            await interaction.response.send_message("❌ SURFERCID_API_KEY belum diatur di .env", ephemeral=True)
+            return
+
+        if not file.filename.lower().endswith(".txt"):
+            await interaction.response.send_message("❌ Harap upload file .txt", ephemeral=True)
+            return
+
         await interaction.response.defer(thinking=True)
 
-        raw_lines = gmails.replace("\n", " ").split()
-        emails = [ln.strip() for ln in raw_lines if EMAIL_RE.match(ln.strip())]
-
-        if not emails:
-            return await interaction.followup.send("❌ Tidak ditemukan Gmail valid di input.")
-
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (DiscordBot)"
-        }
-
-        results: List[str] = []
-        success_count = 0
-        fail_count = 0
-
-        total = len(emails)
-        masked_first = mask_email(emails[0]) if emails else "—"
-        start_time = time.time()
-
-        # satu pesan awal
-        progress_msg = await interaction.followup.send(
-            f"⏳ Memulai proses refresh `{total}` akun...\n"
-            f"Sedang memproses: **{masked_first}**\n"
-            f"Sukses: 0 | Gagal: 0\n"
-            f"Waktu berjalan: 0 detik"
-        )
-
-        # loop tiap email
-        for idx, email in enumerate(emails, start=1):
-            masked = mask_email(email)
-
-            payload = {"email": email, "proxy": DEFAULT_PROXY}
-            try:
-                resp_or_exc, is_exc = await do_post(API_URL, payload, headers, TIMEOUT)
-            except Exception as e:
-                resp_or_exc = e
-                is_exc = True
-
-            if is_exc:
-                results.append(email)
-                fail_count += 1
-                status_line = f"❌ Request error untuk {masked}"
-            else:
-                resp = resp_or_exc
-                if resp.status_code != 200:
-                    results.append(email)
-                    fail_count += 1
-                    status_line = f"❌ HTTP {resp.status_code} untuk {masked}"
-                else:
-                    try:
-                        j = resp.json()
-                    except Exception:
-                        results.append(email)
-                        fail_count += 1
-                        status_line = f"❌ JSON tidak valid untuk {masked}"
-                    else:
-                        if j.get("success") and isinstance(j.get("token"), str) and j.get("token").strip():
-                            token_value = j["token"].strip()
-                            results.append(token_value)
-                            success_count += 1
-                            status_line = f"✅ Berhasil: {masked}"
-                        else:
-                            token_guess = j.get("token") or j.get("data") or j.get("result")
-                            if token_guess and isinstance(token_guess, str) and "|" in token_guess:
-                                results.append(token_guess.strip())
-                                success_count += 1
-                                status_line = f"✅ Berhasil (guessed): {masked}"
-                            else:
-                                results.append(email)
-                                fail_count += 1
-                                status_line = f"❌ Gagal API untuk {masked}"
-
-            # update progress
-            if idx % PROGRESS_UPDATE_EVERY == 0 or idx == total:
-                elapsed = int(time.time() - start_time)
-                try:
-                    await progress_msg.edit(content=(
-                        f"⏳ Memproses akun {idx}/{total}\n"
-                        f"Terakhir diproses: **{masked}**\n\n"
-                        f"{status_line}\n\n"
-                        f"Sukses: **{success_count}** | "
-                        f"Gagal: **{fail_count}**\n"
-                        f"Waktu berjalan: {elapsed} detik"
-                    ))
-                except Exception:
-                    pass
-
-        # tulis hasil ke file
         try:
-            tmp = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8",
-                                              prefix="refreshed_tokens_", suffix=".txt")
-            tmp_path = tmp.name
-            tmp.write("\n".join(results))
-            tmp.close()
+            content = (await file.read()).decode("utf-8", errors="ignore")
         except Exception as e:
-            return await progress_msg.edit(content=f"❌ Gagal membuat file hasil: `{e}`")
+            await interaction.followup.send(f"❌ Gagal membaca file: {e}")
+            return
 
-        summary_text = (
-            f"✅ Selesai. Total diproses: {total}\n"
-            f"Sukses: {success_count} | Gagal: {fail_count}\n"
-            f"Waktu berjalan: {int(time.time() - start_time)} detik"
+        lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
+        if not lines:
+            await interaction.followup.send("❌ File kosong / tidak ada token valid.")
+            return
+
+        conn = db_connect()
+        user_id = interaction.user.id
+        saldo_awal = db_get_user_balance(conn, user_id)
+
+        progress = await interaction.followup.send(
+            f"⏳ Memulai refresh {len(lines)} token...\n"
+            f"Saldo awal: {saldo_awal} WL\n"
+            f"Berjalan: 0/{len(lines)} | ✅ 0 | ❌ 0 | ⚠️ 0"
         )
 
-        # DM hasil
-        user = interaction.user
-        dm_sent = False
-        try:
-            dm_channel = await user.create_dm()
-            await dm_channel.send(content=summary_text,
-                                  file=discord.File(tmp_path, filename="refreshed_tokens.txt"))
-            dm_sent = True
-        except Exception:
-            dm_sent = False
+        success_tokens: List[str] = []
+        failed_tokens: List[str] = []
+        success, fail, skip = 0, 0, 0
+        total = len(lines)
 
-        # Update pesan progress terakhir
-        try:
-            if dm_sent:
-                await progress_msg.edit(content=f"{summary_text}\n✅ Hasil sudah dikirim ke DM kamu.")
+        loop = asyncio.get_event_loop()
+        sem = asyncio.Semaphore(MAX_WORKERS)
+
+        async def process_token(token_line: str) -> Tuple[bool, str]:
+            """Proses 1 token: debit → refresh → rollback jika gagal"""
+            if not db_debit(conn, user_id, 1):
+                return None, "SALDO_KURANG"
+            def work(): return _refresh_one_token(token_line, SURFERCID_API_KEY)
+            ok, result = await loop.run_in_executor(None, work)
+            if ok:
+                return True, result
             else:
-                await progress_msg.edit(
-                    content=f"{summary_text}\n⚠️ Gagal kirim DM — hasil dikirim di sini.",
-                    attachments=[discord.File(tmp_path, filename="refreshed_tokens.txt")]
-                )
-        finally:
+                db_credit(conn, user_id, 1)
+                return False, result
+
+        async def sem_task(line):
+            async with sem:
+                return await process_token(line)
+
+        tasks = [asyncio.create_task(sem_task(ln)) for ln in lines]
+
+        for coro in asyncio.as_completed(tasks):
+            res = await coro
+            if res[0] is True:
+                success += 1
+                success_tokens.append(res[1])
+            elif res[0] is False:
+                fail += 1
+                failed_tokens.append(res[1])
+            else:
+                skip += 1
+                failed_tokens.append(res[1])
+
+            done = success + fail + skip
             try:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
+                await progress.edit(content=(
+                    f"⏳ Progress: {done}/{total}\n"
+                    f"✅ {success} | ❌ {fail} | ⚠️ {skip}\n"
+                    f"Saldo sekarang: {db_get_user_balance(conn, user_id)} WL"
+                ))
             except Exception:
                 pass
 
+        # ===============================
+        # Simpan hasil ke file sementara
+        # ===============================
+        tmp_success = None
+        tmp_failed = None
+        try:
+            if success_tokens:
+                fs = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8",
+                                                 prefix="refreshed_success_", suffix=".txt")
+                fs.write("\n".join(success_tokens))
+                fs.close()
+                tmp_success = fs.name
+            if failed_tokens:
+                ff = tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8",
+                                                 prefix="refreshed_failed_", suffix=".txt")
+                ff.write("\n".join(failed_tokens))
+                ff.close()
+                tmp_failed = ff.name
+        except Exception as e:
+            await progress.edit(content=f"❌ Gagal menulis file hasil: {e}")
+            conn.close()
+            return
+
+        # ===============================
+        # Kirim hasil ke DM user
+        # ===============================
+        summary = (
+            f"✅ Selesai refresh {total} token.\n"
+            f"Sukses: {success} | Gagal: {fail} | Skip saldo kurang: {skip}\n"
+            f"Saldo akhir: {db_get_user_balance(conn, user_id)} WL"
+        )
+
+        dm_ok = False
+        try:
+            dm = await interaction.user.create_dm()
+            files = []
+            if tmp_success:
+                files.append(discord.File(tmp_success, filename="refreshed_success.txt"))
+            if tmp_failed:
+                files.append(discord.File(tmp_failed, filename="refreshed_failed.txt"))
+            if files:
+                await dm.send(content=summary, files=files)
+            else:
+                await dm.send(content=summary)
+            dm_ok = True
+        except Exception:
+            dm_ok = False
+
+        # ===============================
+        # Update progress terakhir di server
+        # ===============================
+        try:
+            if dm_ok:
+                await progress.edit(content=f"{summary}\n✅ Hasil dikirim ke DM kamu.")
+            else:
+                files = []
+                if tmp_success:
+                    files.append(discord.File(tmp_success, filename="refreshed_success.txt"))
+                if tmp_failed:
+                    files.append(discord.File(tmp_failed, filename="refreshed_failed.txt"))
+                if files:
+                    await progress.edit(content=f"{summary}\n⚠️ Gagal DM, hasil dikirim di sini.")
+                    await interaction.followup.send(files=files)
+                else:
+                    await progress.edit(content=f"{summary}\n⚠️ Gagal DM.")
+        finally:
+            # Bersih-bersih
+            for f in [tmp_success, tmp_failed]:
+                if f and os.path.exists(f):
+                    try:
+                        os.remove(f)
+                    except Exception:
+                        pass
+            conn.close()
+
+# ================================================================
+# REGISTER COG
+# ================================================================
 async def setup(bot: commands.Bot):
-    await bot.add_cog(RefreshCommand(bot))
+    await bot.add_cog(RefreshFileCog(bot))
