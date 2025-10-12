@@ -812,15 +812,6 @@ class StockView(View):
         emb.set_footer(text="Gunakan world & bot di atas untuk deposit saldo kamu.")
         await interaction.response.send_message(embed=emb, ephemeral=True)
 
-    # ❌ CANCEL BUTTON opsional (tutup view utama)
-    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.red, row=2)
-    async def btn_cancel(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.edit_message(
-            content="❌ Menu LToken ditutup.", embed=None, view=None
-        )
-
 
 # ======================================================================================
 # MONITOR BACKGROUND
@@ -1079,7 +1070,7 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
             return render_stock_embed(products, balance_web, fmt_wl)
         return inner
 
-    @tasks.loop(seconds=10)
+    @tasks.loop(seconds=60)
     async def update_ltoken_stock():
         """Loop untuk update embed LToken stock setiap 10 detik."""
         if message_cache["channel_id"] is None:
