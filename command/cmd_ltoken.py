@@ -523,10 +523,7 @@ class StockView(View):
     @discord.ui.button(label="🛒 Buy LToken", style=discord.ButtonStyle.green, row=0) # New Buy Button
     async def btn_buy_start(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Pastikan hanya pemanggil command yang bisa memulai flow buy
-        if interaction.user.id != self.requester_id:
-             await interaction.response.send_message("❌ Hanya yang memanggil command ini yang bisa menggunakan tombol Buy.", ephemeral=True)
-             return
-             
+     
         # Tampilkan dropdown di pesan ephemeral baru
         await interaction.response.send_message(
             "Pilih produk yang ingin dibeli, lalu masukkan jumlah di *modal* yang muncul:", 
