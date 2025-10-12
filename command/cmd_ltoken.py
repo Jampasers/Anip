@@ -1,20 +1,19 @@
 # cmd_ltoken.py
 # ======================================================================================
 # FINAL PANJANG (≈600+ lines)
-# - Harga JUAL fix 26 WL (tidak pakai price API)
+# - Harga JUAL fix 27 WL
 # - Tampilkan produk dari /stock (skip "Old Account"), gaya emoji mirip ui_views
-# - Tombol: 🛒 Buy (dropdown → modal), 💰 Balance (DB bot), 🌍 Deposit World (tabel deposit)
+# - Tombol: 🛒 Buy (Button -> View Dropdown -> Modal), 💰 Balance (DB bot), 🌍 Deposit World (tabel deposit)
 # - Purchase: potong saldo sementara -> POST /purchase
-#     * Jika accounts langsung ada -> DM buyer + sukses
+#     * Jika accounts langsung ada -> DM buyer + sukses (KIRIM FILE .TXT)
 #     * Jika masih processing -> simpan pending_orders (status=PENDING), tampil ⏳ Processing
 # - Background monitor:
-#     * start via on_ready (di bot_core) -> aman di discord.py v2
 #     * loop tanpa timeout, cek /getOrder
-#     * fallback ke /getOrders bila /getOrder lambat update
-#     * kalau Success + accounts -> DM buyer & mark SUCCESS
+#     * kalau Success + accounts -> DM buyer & mark SUCCESS (KIRIM FILE .TXT)
 #     * kalau Failed -> rollback saldo & mark FAILED
-# - Command manual: !order <id>, !myorders, !setdeposit <world> <botname> (admin only via role/env)
-# - Logging detail: [DEBUG][ltoken] ...
+# - Command manual: !order <id>, !myorders
+# - COMMAND !setdeposit TELAH DIHAPUS
+# - COOLDOWN Dihapus (tidak ada @commands.cooldown)
 # ======================================================================================
 
 import discord
@@ -26,13 +25,14 @@ import asyncio
 import datetime
 import os
 from typing import Any, Dict, List, Optional, Tuple
+from io import BytesIO # <--- BARU: Import untuk membuat file di memori
 
 # ----------------------------------
 # KONFIG (NILAI DIAMBIL DARI FILE YANG ANDA BERIKAN)
 # ----------------------------------
-API_KEY: str = "6f54c300286ece6ad5d0ff172d38d8c3" # <--- API KEY Anda
-BASE_URL: str = "https://cid.surferwallet.net/publicApi" # <--- BASE URL Anda
-SELL_PRICE_WL: int = 27            # harga jual fix
+API_KEY: str = "6f54c300286ece6ad5d0ff172d38d8c3" # <--- API KEY Anda (Updated)
+BASE_URL: str = "https://cid.surferwallet.net/publicApi" 
+SELL_PRICE_WL: int = 27            # harga jual fix (Updated)
 MONITOR_INTERVAL_SEC: int = 5      # interval monitor pending (realtime, bisa 3-5 detik)
 GUILD_ID_ENV = "SERVER_ID"         # untuk @app_commands.guilds
 
@@ -117,8 +117,6 @@ async def http_get_json(url: str, *,
     """GET -> JSON (bisa pakai params atau JSON body jika server nerima)."""
     log_debug(f"[HTTP][GET] {url} params={params} body={json_body}")
     async with aiohttp.ClientSession() as session:
-        # Menghapus SSL:default error saat mencoba localhost:8080 dengan menambahkan aiohttp.TCPConnector(ssl=False)
-        # Tapi karena sekarang pakai BASE_URL HTTPS yang benar, kita kembalikan normal
         try:
             async with session.get(url, params=params, json=json_body, headers=headers, timeout=10) as resp:
                 status = resp.status
@@ -132,7 +130,7 @@ async def http_get_json(url: str, *,
                 return data
         except aiohttp.ClientConnectorError as e:
              log_debug(f"[HTTP][GET] Connection Error: {e}")
-             raise e # Lempar error koneksi agar monitor loop bisa menangkap
+             raise e 
 
 async def http_post_json(url: str, *, payload: Dict[str, Any],
                          headers: Optional[Dict[str, str]] = None) -> Any:
@@ -152,7 +150,7 @@ async def http_post_json(url: str, *, payload: Dict[str, Any],
                 return data
         except aiohttp.ClientConnectorError as e:
             log_debug(f"[HTTP][POST] Connection Error: {e}")
-            raise e # Lempar error koneksi agar modal/purchase bisa menangkap
+            raise e 
 
 # ======================================================================================
 # API WRAPPERS
@@ -221,29 +219,62 @@ def safe_int(x: Any, default: int = 0) -> int:
 def now_str() -> str:
     return datetime.datetime.now().strftime('%H:%M:%S')
 
-def format_accounts_dm(product_name: str, qty: int, total: int, accounts: List[Dict[str, Any]]) -> str:
-    header = (
-        "✅ Your LToken Order is Ready!\n\n"
-        f"📦 Product : {product_name}\n"
-        f"🔢 Quantity: {qty}\n"
-        f"💰 Total   : {total} {EMO_WL}\n\n"
-        "Here are your accounts:\n"
-        "────────────────────────────"
-    )
-    rows = []
+# --- NEW FORMATTING LOGIC ---
+def format_single_account_to_string(acc: Dict[str, Any]) -> str:
+    """Formats a single account dict into the pipe-separated login string format."""
+    # Mapping API fields (acc) to required output keys
+    # Menggunakan nilai default untuk field yang tidak disediakan API (seperti platform, cbits, playerAge)
+    data = {
+        # Ambil nilai dari API, jika tidak ada gunakan default yang diminta user
+        "mac": acc.get("mac", "02:00:00:00:00:00"),
+        "wk": acc.get("wk", "NONE0"),
+        "platform": acc.get("platform", "1"), 
+        "rid": acc.get("rid", "N/A"),
+        "name": acc.get("name") or acc.get("growid", "N/A"),
+        "cbits": acc.get("cbits", "1536"), 
+        "playerAge": acc.get("playerAge", "25"),
+        "token": acc.get("token") or acc.get("ltoken", "N/A"),
+        "vid": acc.get("vid", "N/A"),
+    }
+    
+    # Urutan kunci sesuai permintaan: mac, wk, platform, rid, name, cbits, playerAge, token, vid
+    parts = []
+    for key in ["mac", "wk", "platform", "rid", "name", "cbits", "playerAge", "token", "vid"]:
+        parts.append(f"{key}:{data.get(key, 'N/A')}")
+        
+    return "|".join(parts)
+
+def format_accounts_dm(product_name: str, qty: int, total: int, accounts: List[Dict[str, Any]]) -> Tuple[str, discord.File]:
+    """
+    Formats accounts into a single file and prepares the DM message.
+    Returns: (text_message, discord.File)
+    """
+    # 1. Format each account into the pipe-separated string
+    formatted_accounts = []
     for acc in accounts:
-        # Field yang umum di getOrder real: name, token, rid, vid, mac, wk
-        rows.append(
-            f"\n👤 GrowID   : `{acc.get('name') or acc.get('growid', 'N/A')}`\n"
-            f"🔑 Token    : `{acc.get('token') or acc.get('ltoken', 'N/A')}`\n"
-            f"📧 RID      : `{acc.get('rid', 'N/A')}`\n"
-            f"🆔 VID      : `{acc.get('vid', 'N/A')}`\n"
-            f"🔧 MAC      : `{acc.get('mac', 'N/A')}`\n"
-            f"🔩 WK       : `{acc.get('wk', 'N/A')}`\n"
-            "────────────────────────────"
-        )
-    tail = "\n⚠️ Keep your credentials safe."
-    return header + "".join(rows) + tail
+        formatted_accounts.append(format_single_account_to_string(acc))
+
+    # 2. Join into a single string (content for the file)
+    file_content = "\n".join(formatted_accounts)
+    
+    # 3. Create the discord.File object using a BytesIO buffer
+    file_name = f"LToken_Order_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    file_buffer = BytesIO(file_content.encode('utf-8'))
+    discord_file = discord.File(file_buffer, filename=file_name)
+
+    # 4. Create the text message
+    text_message = (
+        f"✅ **LToken Order Ready!**\n"
+        f"📦 **Product** : {product_name}\n"
+        f"🔢 **Quantity**: {qty}\n"
+        f"💰 **Total** : {total} {EMO_WL}\n\n"
+        f"{EMO_PANAH} File **`{file_name}`** berisi {qty} akun telah dikirim. Gunakan data di dalamnya untuk login.\n"
+        "⚠️ Simpan data akun Anda dengan aman."
+    )
+    
+    return text_message, discord_file
+# --- END NEW FORMATTING LOGIC ---
+
 
 # ======================================================================================
 # RENDER EMBED
@@ -295,7 +326,10 @@ class ProductSelect(Select):
 
     async def callback(self, interaction: discord.Interaction):
         product_name = self.values[0]
+        # Setelah memilih produk, hapus pesan dropdown dan tampilkan modal
         await interaction.response.send_modal(BuyLTokenModal(self.c, self.conn, product_name))
+        # Karena kita memanggil modal, pesan dropdown (ephemeral) akan tetap ada 
+        # sampai di-dismiss, tidak perlu di-edit/dihapus di sini
 
 class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
     def __init__(self, c, conn, product_name: str):
@@ -326,7 +360,7 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
             return
         balance_db = int(row[0] or 0)
 
-        # 3) Hitung total harga fix 26 WL
+        # 3) Hitung total harga fix 27 WL
         total = qty * SELL_PRICE_WL
         if balance_db < total:
             await interaction.response.send_message(
@@ -370,7 +404,7 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
         processing_flag = bool(result.get("processing", False))
         status_text = str(result.get("status", "")).lower()
 
-        # 6) Jika langsung ada akun -> sukses + DM
+        # 6) Jika langsung ada akun -> sukses + DM (UPDATE KIRIM FILE)
         if result.get("success") and accounts:
             # catat order selesai
             self.c.execute(
@@ -388,14 +422,17 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
                 emb.add_field(name="Order ID", value=order_id, inline=False)
             if order_date:
                 emb.set_footer(text=f"Order Date: {order_date}")
+            
+            # TANGGAPI INTERAKSI DULU
             await interaction.response.send_message(embed=emb, ephemeral=True)
 
-            # DM akun
+            # DM akun (MENGGUNAKAN FILE)
             try:
-                await interaction.user.send(format_accounts_dm(self.product_name, qty, total, accounts))
+                dm_msg, dm_file = format_accounts_dm(self.product_name, qty, total, accounts)
+                await interaction.user.send(dm_msg, file=dm_file)
             except discord.Forbidden:
                 try:
-                    await interaction.followup.send("⚠️ Could not DM you the account details. Please enable your DMs!", ephemeral=True)
+                    await interaction.followup.send("⚠️ Gagal DM: Akun tidak terkirim. Mohon aktifkan DM Anda!", ephemeral=True)
                 except Exception:
                     pass
             return
@@ -428,7 +465,7 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
 
             # embed Processing
             processing = discord.Embed(title="⏳ Purchase Processing", color=discord.Color.orange())
-            processing.add_field(name="Status", value="Payment received, generating token...")
+            processing.add_field(name="Status", value="Pembayaran diterima, sedang proses pembuatan token...")
             processing.add_field(name="Product", value=self.product_name, inline=True)
             processing.add_field(name="Quantity", value=str(qty), inline=True)
             processing.add_field(name="Total", value=f"{total} {EMO_WL}", inline=True)
@@ -447,6 +484,20 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
         await interaction.response.send_message(pretty, ephemeral=True)
         log_debug(f"[ORDER] Failed; rollback user={uid} reason={err_msg}")
 
+
+# --- NEW VIEW FOR BUY FLOW (Dropdown) ---
+class BuyFlowView(View):
+    def __init__(self, products: List[Dict[str, Any]], c, conn):
+        super().__init__(timeout=180) # Timeout 3 minutes
+        # Dropdown pilih produk
+        self.add_item(ProductSelect(products, c, conn))
+        
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.red, row=1)
+    async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="❌ Purchase dibatalkan.", embed=None, view=None)
+
+
+# --- MAIN VIEW MODIFIED ---
 class StockView(View):
     def __init__(self, products: List[Dict[str, Any]], c, conn, requester_id: int, fmt_wl):
         super().__init__(timeout=None)
@@ -454,8 +505,22 @@ class StockView(View):
         self.conn = conn
         self.requester_id = requester_id
         self.fmt_wl = fmt_wl
-        # Dropdown pilih produk
-        self.add_item(ProductSelect(products, c, conn))
+        self.products = products # Simpan products untuk Buy button
+        # self.add_item(ProductSelect(products, c, conn)) # LOGIKA DROPDOWN LAMA DIHAPUS
+
+    @discord.ui.button(label="🛒 Buy LToken", style=discord.ButtonStyle.green, row=0) # New Buy Button
+    async def btn_buy_start(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Pastikan hanya pemanggil command yang bisa memulai flow buy
+        if interaction.user.id != self.requester_id:
+             await interaction.response.send_message("❌ Hanya yang memanggil command ini yang bisa menggunakan tombol Buy.", ephemeral=True)
+             return
+             
+        # Tampilkan dropdown di pesan ephemeral baru
+        await interaction.response.send_message(
+            "Pilih produk yang ingin dibeli, lalu masukkan jumlah di *modal* yang muncul:", 
+            view=BuyFlowView(self.products, self.c, self.conn), 
+            ephemeral=True
+        )
 
     @discord.ui.button(label="💰 Balance", style=discord.ButtonStyle.blurple, row=1)
     async def btn_balance(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -539,7 +604,7 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
                             accounts = match.get("accounts", []) or []
                             log_debug(f"[MONITOR] Fallback getOrders matched: status={status_lower}, accounts={len(accounts)}")
 
-                # SUCCESS + accounts -> DM + mark SUCCESS
+                # SUCCESS + accounts -> DM + mark SUCCESS (UPDATE KIRIM FILE)
                 if status_lower == "success" and accounts:
                     # update pending_orders
                     c.execute("UPDATE pending_orders SET status=? WHERE order_id=?", ("SUCCESS", order_id))
@@ -551,7 +616,9 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
                     user = bot.get_user(int(user_id))
                     if user:
                         try:
-                            await user.send(format_accounts_dm(product_name, int(qty), int(total), accounts))
+                            # Menggunakan format_accounts_dm yang baru (mengembalikan file)
+                            dm_msg, dm_file = format_accounts_dm(product_name, int(qty), int(total), accounts)
+                            await user.send(dm_msg, file=dm_file)
                         except Exception as e:
                             log_debug(f"[MONITOR] DM fail user={user_id}: {e}")
                     continue
@@ -567,7 +634,7 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
                     user = bot.get_user(int(user_id))
                     if user:
                         try:
-                            await user.send(f"❌ Order {order_id} failed. Your balance has been restored to {balance_before} {EMO_WL}.")
+                            await user.send(f"❌ Order {order_id} failed. Saldo Anda telah dikembalikan ke {balance_before} {EMO_WL}.")
                         except Exception as e:
                             log_debug(f"[MONITOR] DM fail user={user_id}: {e}")
                     continue
@@ -614,7 +681,7 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None): # <-- SETUP
     @bot.hybrid_command(
         name="ltokenstock",
         usage=f"{PREFIX}ltokenstock",
-        description="Show LToken stock (web balance based, price fixed 26 WL)"
+        description="Show LToken stock (web balance based, price fixed 27 WL)"
     )
     @app_commands.guilds(_guild_obj_from_env() or discord.Object(0))
     async def ltokenstock(ctx: commands.Context):
@@ -666,9 +733,9 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None): # <-- SETUP
             emb.add_field(name="Status", value="✅ SUCCESS", inline=False)
             accounts = data.get("accounts", []) or []
             if accounts:
-                emb.add_field(name="Info", value="✅ Accounts are ready. Check your DMs.", inline=False)
+                emb.add_field(name="Info", value="✅ Akun sudah siap. Cek DM Anda.", inline=False)
             else:
-                emb.add_field(name="Info", value="⚠️ Success without accounts payload yet. Monitor is checking.", inline=False)
+                emb.add_field(name="Info", value="⚠️ Success tapi belum ada akun. Monitor sedang memeriksa.", inline=False)
         elif "fail" in status.lower():
             emb.add_field(name="Status", value="❌ FAILED", inline=False)
         elif "process" in status.lower():
@@ -693,7 +760,7 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None): # <-- SETUP
         )
         rows = c.fetchall()
         if not rows:
-            await ctx.reply("❌ You have no orders yet.", mention_author=False)
+            await ctx.reply("❌ Anda belum memiliki pesanan.", mention_author=False)
             return
 
         lines = []
@@ -702,18 +769,9 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None): # <-- SETUP
                 f"**#{order_id}** • {product_name} x{qty} • {fmt_wl(total)} {EMO_WL} • {status} • {created_at.split('.')[0]}" # format WL dan hilangkan milidetik
             )
 
-        emb = discord.Embed(title="🧾 Your Recent Orders", color=discord.Color.blue(),
+        emb = discord.Embed(title="🧾 Pesanan Terbaru Anda", color=discord.Color.blue(),
                              description="\n".join(lines))
         await ctx.reply(embed=emb, mention_author=False)
-
-    # -------------- COMMAND: setdeposit (admin only) --------------
-    @bot.command(name="setdeposit", help="Set deposit world & bot name (admin only)")
-    @commands.has_permissions(administrator=True)
-    async def setdeposit(ctx: commands.Context, world: str, botname: str):
-        c.execute("DELETE FROM deposit")
-        c.execute("INSERT INTO deposit (world, bot) VALUES (?, ?)", (world, botname))
-        conn.commit()
-        await ctx.reply(f"✅ Deposit updated.\nWorld: **{world}**\nBot: **{botname}**", mention_author=False)
-
-    # Catatan: Tidak perlu ada fungsi monitor_pending_orders atau start_monitor di sini.
-    # Itu sudah diurus oleh bot_core.py yang memanggil monitor_pending_orders_loop.
+        
+    # -------------- COMMAND: setdeposit (TELAH DIHAPUS) --------------
+    # Logic untuk command !setdeposit telah dihapus sesuai permintaan.
