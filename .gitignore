@@ -238,3 +238,4 @@ bot dc.zip
 # ⛔ System
 .DS_Store
 Thumbs.db
+import discord.py
