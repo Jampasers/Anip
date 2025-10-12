@@ -1,12 +1,23 @@
 # cmd_ltoken.py
 # ======================================================================================
 # FINAL PANJANG & LENGKAP (Siap Pakai)
-# - HARGA JUAL FIX 27 WL (bisa override via env LTOKEN_SELL_PRICE_WL)
-# - Auto-Role & Auto-Testimoni menggunakan ID HARDCODED LOKAL (sesuai permintaan user)
+# - Harga JUAL fix 27 WL (bisa override via env LTOKEN_SELL_PRICE_WL)
+# - Tampilkan produk dari /stock (skip "Old Account"), gaya emoji mirip ui_views
+# - Tombol: 🛒 Buy (Button -> View Dropdown -> Modal), 💰 Balance (DB bot), 🌍 Deposit World (tabel deposit)
+# - Cooldown KHUSUS tombol Buy saja (default 10s, env: LTOKEN_BUY_COOLDOWN_SEC)
+# - Purchase: potong saldo sementara -> POST /purchase
+#     * Jika accounts langsung ada -> DM buyer + sukses (KIRIM FILE .TXT)
+#     * Jika masih processing -> simpan pending_orders (status=PENDING), tampil ⏳ Processing
 # - Background monitor:
-#     * loop cek /getOrder real-time
+#     * loop cek /getOrder real-time (MONITOR_INTERVAL_SEC, default 5)
 #     * kalau Success + accounts -> DM buyer & mark SUCCESS (KIRIM FILE .TXT)
 #     * kalau Failed -> rollback saldo & mark FAILED
+# - Command manual: /ltokenstock (hybrid), !order <id>, !myorders
+# - Safety: Modal pakai defer() + followup.send agar bebas 40060/10062
+# - Env opsional:
+#     LTOKEN_API_KEY, LTOKEN_BASE_URL, SERVER_ID (untuk app_commands.guilds),
+#     LTOKEN_SELL_PRICE_WL, LTOKEN_BUY_COOLDOWN_SEC, LTOKEN_MONITOR_INTERVAL_SEC,
+#     LTOKEN_ROLE_ID (role pembeli), LTOKEN_TESTIMONI_CHANNEL_ID (channel testimoni)
 # ======================================================================================
 
 import discord
@@ -31,11 +42,6 @@ SELL_PRICE_WL: int = 27  # harga jual fix (Updated)
 MONITOR_INTERVAL_SEC: int = 5  # interval monitor pending
 GUILD_ID_ENV = "SERVER_ID"  # untuk @app_commands.guilds
 
-# --- [PERBAIKAN] DUA BARIS PENYEBAB CRASH GLOBAL DIHAPUS ---
-# role = interaction.guild.get_role(839981629044555853)
-# channel = interaction.client.get_channel(839981637567643668)
-# -----------------------------------------------------------------
-
 # Ambil override dari ENV bila ada
 try:
     SELL_PRICE_WL = int(os.getenv("LTOKEN_SELL_PRICE_WL", SELL_PRICE_WL))
@@ -49,29 +55,19 @@ except Exception:
 # Cooldown khusus tombol BUY
 BUY_COOLDOWN_SEC: int = int(os.getenv("LTOKEN_BUY_COOLDOWN_SEC", "10"))
 
-# --- [TIDAK DIGUNAKAN LAGI UNTUK AUTOTESTIMONI & ROLE KARENA MENGGUNAKAN HARDCODED ID] ---
-# ROLE_BUYLTOKEN_ID: Optional[int] = None
-# TESTIMONI_CHANNEL_ID: Optional[int] = None
-# try:
-#     _rid = os.getenv("LTOKEN_ROLE_ID")
-#     ROLE_BUYLTOKEN_ID = int(_rid) if _rid else None
-# except Exception:
-#     ROLE_BUYLTOKEN_ID = None
-# try:
-#     _cid = os.getenv("LTOKEN_TESTIMONI_CHANNEL_ID")
-#     TESTIMONI_CHANNEL_ID = int(_cid) if _cid else None
-# except Exception:
-#     TESTIMONI_CHANNEL_ID = None
-# -------------------------------------------------------------------------------------------
-
-# ----------------------------------
-# HARDCODED ID LOKAL (Sesuai Permintaan)
-# ----------------------------------
-# ID Role Pembeli Anda: 839981629044555853
-LOCAL_ROLE_ID = 839981629044555853
-# ID Channel Testimoni Anda: 839981637567643668
-LOCAL_TESTIMONI_CHANNEL_ID = 839981637567643668
-
+# Opsional: Role & Channel testimoni
+ROLE_BUYLTOKEN_ID: Optional[int] = None
+TESTIMONI_CHANNEL_ID: Optional[int] = None
+try:
+    _rid = os.getenv("LTOKEN_ROLE_ID")
+    ROLE_BUYLTOKEN_ID = int(_rid) if _rid else None
+except Exception:
+    ROLE_BUYLTOKEN_ID = None
+try:
+    _cid = os.getenv("LTOKEN_TESTIMONI_CHANNEL_ID")
+    TESTIMONI_CHANNEL_ID = int(_cid) if _cid else None
+except Exception:
+    TESTIMONI_CHANNEL_ID = None
 
 # ----------------------------------
 # EMOJI (sesuai ui_views)
@@ -570,92 +566,75 @@ class BuyLTokenModal(Modal, title="🛒 Buy LToken"):
                 )
                 self.conn.commit()
 
-                
-            # ✅ Auto-role & Auto-testimoni lokal (Menggunakan HARDCODED ID LOKAL)
-            try:
-                # --- 1️⃣ Pastikan order_id valid ---
-                if not order_id:
-                    self.c.execute(
-                        "SELECT order_id FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT 1",
-                        (uid,),
-                    )
-                    row = self.c.fetchone()
-                    if row and row[0]:
-                        order_id = row[0]
-                    else:
-                        order_id = f"local-{uid}-{int(datetime.datetime.now().timestamp())}"
-
-                # --- 2️⃣ Tambahkan role pembeli (MENGGUNAKAN ID LOKAL) ---
-                if interaction.guild:
-                    role = interaction.guild.get_role(LOCAL_ROLE_ID)
-                    if role:
-                        await interaction.user.add_roles(role)
-                        print(f"[DEBUG] Role 'Buy' diberikan ke {interaction.user}.")
-                    else:
-                        print(f"[WARN] Role 'Buy' ID={LOCAL_ROLE_ID} tidak ditemukan di server.")
-
-                # --- 3️⃣ Kirim testimoni ke channel (MENGGUNAKAN ID LOKAL) ---
-                channel = interaction.client.get_channel(LOCAL_TESTIMONI_CHANNEL_ID)
-                if channel:
-                    embed = discord.Embed(
-                        title=f"#Order Number: {order_id}",
-                        color=discord.Color.gold()
-                    )
-                    embed.add_field(
-                        name="<a:megaphone:1419515391851626580> Pembeli",
-                        value=interaction.user.mention,
-                        inline=False
-                    )
-                    embed.add_field(
-                        name="Produk <a:menkrep:1122531571098980394>",
-                        value=f"{self.product_name} x{qty}",
-                        inline=False
-                    )
-                    embed.add_field(
-                        name="Total Price",
-                        value=f"{total} {EMO_WL}",
-                        inline=False
-                    )
-                    embed.set_footer(text="Thanks For Purchasing Our Product(s)")
-                    await channel.send(embed=embed)
-                    print(f"[DEBUG] Testimoni terkirim ke {channel.id} (order_id={order_id}).")
-                else:
-                    print("[WARN] Channel testimoni tidak ditemukan atau bot tidak punya izin.")
-
-            except Exception as e:
-                print(f"[ERROR] Gagal kirim testimoni/role: {e}")
-
-            # DM akun (pakai file .txt)
-            try:
-                dm_msg, dm_file = format_accounts_dm(
-                    self.product_name, qty, total, accounts
-                )
-                await interaction.user.send(dm_msg, file=dm_file)
-            except discord.Forbidden:
+                # Role (opsional)
                 try:
-                    await interaction.followup.send(
-                        "⚠️ Gagal DM: Akun tidak terkirim. Mohon aktifkan DM Anda!",
-                        ephemeral=True,
-                    )
-                except Exception:
-                    pass
+                    if ROLE_BUYLTOKEN_ID and interaction.guild:
+                        role = interaction.guild.get_role(ROLE_BUYLTOKEN_ID)
+                        if role:
+                            await interaction.user.add_roles(role)
+                except Exception as e:
+                    log_debug(f"[ROLE] gagal tambah role uid={uid}: {e}")
 
-            # Balasan ke user (embed sukses)
-            emb = discord.Embed(
-                title="✅ Purchase Success!", color=discord.Color.green()
-            )
-            emb.add_field(name="Product", value=self.product_name, inline=False)
-            emb.add_field(name="Quantity", value=str(qty), inline=True)
-            emb.add_field(name="Total", value=f"{total} {EMO_WL}", inline=True)
-            emb.add_field(
-                name="Balance Baru", value=f"{new_balance} {EMO_WL}", inline=False
-            )
-            if order_id:
-                emb.add_field(name="Order ID", value=order_id, inline=False)
-            if order_date:
-                emb.set_footer(text=f"Order Date: {order_date}")
-            await interaction.followup.send(embed=emb, ephemeral=True)
-            return
+                # Testimoni (opsional)
+                try:
+                    if TESTIMONI_CHANNEL_ID:
+                        ch = interaction.client.get_channel(TESTIMONI_CHANNEL_ID)
+                        if ch:
+                            embed_testi = discord.Embed(
+                                title=f"#LToken Order #{order_id}",
+                                color=discord.Color.gold(),
+                            )
+                            embed_testi.add_field(
+                                name="👤 Buyer", value=interaction.user.mention, inline=False
+                            )
+                            embed_testi.add_field(
+                                name="🧩 Product",
+                                value=f"{self.product_name} x{qty}",
+                                inline=False,
+                            )
+                            embed_testi.add_field(
+                                name="💰 Total",
+                                value=f"{total} {EMO_WL}",
+                                inline=False,
+                            )
+                            embed_testi.set_footer(
+                                text="Thanks for purchasing LToken from NIF Store 💎"
+                            )
+                            await ch.send(embed=embed_testi)
+                except Exception as e:
+                    log_debug(f"[TESTIMONI] gagal kirim: {e}")
+
+                # DM akun (pakai file .txt)
+                try:
+                    dm_msg, dm_file = format_accounts_dm(
+                        self.product_name, qty, total, accounts
+                    )
+                    await interaction.user.send(dm_msg, file=dm_file)
+                except discord.Forbidden:
+                    try:
+                        await interaction.followup.send(
+                            "⚠️ Gagal DM: Akun tidak terkirim. Mohon aktifkan DM Anda!",
+                            ephemeral=True,
+                        )
+                    except Exception:
+                        pass
+
+                # Balasan ke user (embed sukses)
+                emb = discord.Embed(
+                    title="✅ Purchase Success!", color=discord.Color.green()
+                )
+                emb.add_field(name="Product", value=self.product_name, inline=False)
+                emb.add_field(name="Quantity", value=str(qty), inline=True)
+                emb.add_field(name="Total", value=f"{total} {EMO_WL}", inline=True)
+                emb.add_field(
+                    name="Balance Baru", value=f"{new_balance} {EMO_WL}", inline=False
+                )
+                if order_id:
+                    emb.add_field(name="Order ID", value=order_id, inline=False)
+                if order_date:
+                    emb.set_footer(text=f"Order Date: {order_date}")
+                await interaction.followup.send(embed=emb, ephemeral=True)
+                return
 
             # 7) Kalau masih processing (tidak ada accounts) -> simpan pending & tampil Processing
             if result.get("success") and (processing_flag or "processing" in status_text):
@@ -744,6 +723,14 @@ class BuyFlowView(View):
         super().__init__(timeout=180)  # Timeout 3 minutes
         self.add_item(ProductSelect(products, c, conn))
 
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.red, row=1)
+    async def btn_cancel(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.edit_message(
+            content="❌ Purchase dibatalkan.", embed=None, view=None
+        )
+
 
 # --- Cooldown manual untuk tombol Buy LToken ---
 buy_cooldown: Dict[int, dt] = {}  # {user_id: datetime terakhir klik tombol Buy}
@@ -824,6 +811,15 @@ class StockView(View):
         emb.add_field(name="Bot Name", value=botname, inline=True)
         emb.set_footer(text="Gunakan world & bot di atas untuk deposit saldo kamu.")
         await interaction.response.send_message(embed=emb, ephemeral=True)
+
+    # ❌ CANCEL BUTTON opsional (tutup view utama)
+    @discord.ui.button(label="❌ Cancel", style=discord.ButtonStyle.red, row=2)
+    async def btn_cancel(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.edit_message(
+            content="❌ Menu LToken ditutup.", embed=None, view=None
+        )
 
 
 # ======================================================================================
@@ -936,22 +932,22 @@ async def monitor_pending_orders_loop(bot: commands.Bot, c, conn) -> None:
                     except Exception as e:
                         log_debug(f"[MONITOR] insert ltoken_orders fail: {e}")
 
-                    # Role (opsional) - MENGGUNAKAN ID LOKAL
+                    # Role (opsional)
                     try:
-                        if LOCAL_ROLE_ID:
+                        if ROLE_BUYLTOKEN_ID:
                             for guild in bot.guilds:
                                 member = guild.get_member(int(user_id))
                                 if member:
-                                    role = guild.get_role(LOCAL_ROLE_ID)
+                                    role = guild.get_role(ROLE_BUYLTOKEN_ID)
                                     if role:
                                         await member.add_roles(role)
                     except Exception as e:
                         log_debug(f"[ROLE] Gagal menambah role user={user_id}: {e}")
 
-                    # Testimoni (opsional) - MENGGUNAKAN ID LOKAL
+                    # Testimoni (opsional)
                     try:
-                        if LOCAL_TESTIMONI_CHANNEL_ID:
-                            channel = bot.get_channel(LOCAL_TESTIMONI_CHANNEL_ID)
+                        if TESTIMONI_CHANNEL_ID:
+                            channel = bot.get_channel(TESTIMONI_CHANNEL_ID)
                             if channel:
                                 embed = discord.Embed(
                                     title=f"#LToken Order #{order_id}",
@@ -1072,7 +1068,7 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
 
     ensure_schema(c, conn)
 
-    # === AUTO REFRESH STOCK (SETIAP 60 DETIK) ===
+    # === AUTO REFRESH STOCK (SETIAP 10 DETIK) ===
     message_cache = {"channel_id": None, "message": None}
 
     def build_ltoken_embed():
@@ -1083,9 +1079,9 @@ def setup(bot: commands.Bot, c, conn, fmt_wl, PREFIX, DB_NAME=None):
             return render_stock_embed(products, balance_web, fmt_wl)
         return inner
 
-    @tasks.loop(seconds=60)
+    @tasks.loop(seconds=10)
     async def update_ltoken_stock():
-        """Loop untuk update embed LToken stock setiap 60 detik."""
+        """Loop untuk update embed LToken stock setiap 10 detik."""
         if message_cache["channel_id"] is None:
             return
         channel = bot.get_channel(message_cache["channel_id"])
