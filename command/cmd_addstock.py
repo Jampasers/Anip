@@ -98,3 +98,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 f"Added  : {added}\n"
                 f"Total  : {total}```"
             )
+
+        # TRIGGER ALOKASI PO OTOMATIS
+        if hasattr(bot, "allocate_preorders"):
+            print(f"[ADDSTOCK] Triggering allocation for {code}...")
+            await bot.allocate_preorders(code)
+

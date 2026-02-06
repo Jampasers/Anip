@@ -227,8 +227,9 @@ async def allocate_preorders(kode: str):
         bought_names = "\n".join([x[1] for x in items])
 
         # Coba DM sebelum commit
-        member = bot.get_user(user_id)
         try:
+            # Gunakan fetch_user untuk mengambil user dari API Discord (bukan hanya cache)
+            member = await bot.fetch_user(user_id)
             dm_msg = (
                 "```🛒 Pre Order Success!\n"
                 "--------------------------\n"
@@ -238,11 +239,19 @@ async def allocate_preorders(kode: str):
                 f"Total  : {price*jatah}\n\n"
                 f"📦 Items:\n{bought_names}```"
             )
-            if member is None:
-                raise RuntimeError("Member not found in cache")
             await member.send(dm_msg)
-        except Exception:
+        except Exception as e:
             # DM gagal -> cancel PO & lanjut user berikutnya
+            print(f"[ERROR] Gagal DM user {user_id}: {e} -> Auto Cancel & Refund PO {po_id}")
+            
+            # --- REFUND LOGIC ---
+            # Kembalikan saldo sesuai jumlah yang tersisa di PO ini (amount) * harga saat ini (price)
+            # Catatan: Ini menggunakan harga SAAT INI. Jika harga berubah sejak PO, refund mengikuti harga baru.
+            refund_total = amount * price
+            c.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (refund_total, user_id))
+            print(f"[REFUND] User {user_id} direfund {refund_total} WL (PO {po_id} cancelled)")
+            # --------------------
+
             c.execute("UPDATE preorders SET status='cancelled' WHERE id=?", (po_id,))
             conn.commit()
             continue
@@ -288,6 +297,7 @@ async def allocate_preorders(kode: str):
 
         conn.commit()
 
+
 @tasks.loop(seconds=10)  # jalan tiap 10 detik
 async def auto_allocate_po():
     # Ambil semua kode produk yg ada preorder waiting
@@ -313,6 +323,10 @@ async def on_ready():
         print("[AUTO_ALLOCATE] Loop started")
 
     print(f"🤖 Bot ready as {bot.user}")
+    
+    # Expose function to be used by other modules
+    bot.allocate_preorders = allocate_preorders
+
     
     # --- PERBAIKAN MONITOR LTOKEN DI SINI (Memulai monitor LToken dengan benar) ---
     # if not hasattr(bot, "ltoken_monitor_started"):

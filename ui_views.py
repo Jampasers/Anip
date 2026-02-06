@@ -27,6 +27,7 @@ fmt_wl = None
 PREFIX = "!"
 
 last_click = {}  # simpan user cooldown {user_id: timestamp}
+processing_locks = set() # simpan user yang sedang diproses {user_id}
 COOLDOWN_SECONDS = 10
 BUY_LOCK = asyncio.Lock()  # Global lock for purchasing
 
@@ -180,42 +181,56 @@ class GrowIDModal(Modal, title="Set / Change GrowID"):
         self.add_item(self.name_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        new_name = normalize_name(self.name_input.value)
-        if not new_name:
+        # 1. Cek Lock User
+        if self.author_id in processing_locks:
             await interaction.response.send_message(
-                "❌ Invalid GrowID (gunakan huruf/angka).", ephemeral=True
+                "⏳ Sedang memproses transaksi sebelumnya. Mohon tunggu...",
+                ephemeral=True
             )
             return
 
-        # Cek tidak dipakai user lain
-        c.execute("SELECT user_id FROM users WHERE nama=?", (new_name,))
-        row = c.fetchone()
-        if row and row[0] != self.author_id:
-            await interaction.response.send_message(
-                "❌ GrowID sudah dipakai user lain.", ephemeral=True
-            )
-            return
+        # 2. Lock
+        processing_locks.add(self.author_id)
 
-        # Update/insert
-        c.execute("SELECT nama FROM users WHERE user_id=?", (self.author_id,))
-        me = c.fetchone()
-        if me:
-            c.execute(
-                "UPDATE users SET nama=? WHERE user_id=?", (new_name, self.author_id)
-            )
-            conn.commit()
-            await interaction.response.send_message(
-                f"✅ GrowID updated: {new_name}", ephemeral=True
-            )
-        else:
-            c.execute(
-                "INSERT INTO users (nama,balance,user_id) VALUES (?,0,?)",
-                (new_name, self.author_id),
-            )
-            conn.commit()
-            await interaction.response.send_message(
-                f"✅ GrowID registered: {new_name}", ephemeral=True
-            )
+        try:
+            new_name = normalize_name(self.name_input.value)
+            if not new_name:
+                await interaction.response.send_message(
+                    "❌ Invalid GrowID (gunakan huruf/angka).", ephemeral=True
+                )
+                return
+
+            # Cek tidak dipakai user lain
+            c.execute("SELECT user_id FROM users WHERE nama=?", (new_name,))
+            row = c.fetchone()
+            if row and row[0] != self.author_id:
+                await interaction.response.send_message(
+                    "❌ GrowID sudah dipakai user lain.", ephemeral=True
+                )
+                return
+
+            # Update/insert
+            c.execute("SELECT nama FROM users WHERE user_id=?", (self.author_id,))
+            me = c.fetchone()
+            if me:
+                c.execute(
+                    "UPDATE users SET nama=? WHERE user_id=?", (new_name, self.author_id)
+                )
+                conn.commit()
+                await interaction.response.send_message(
+                    f"✅ GrowID updated: {new_name}", ephemeral=True
+                )
+            else:
+                c.execute(
+                    "INSERT INTO users (nama,balance,user_id) VALUES (?,0,?)",
+                    (new_name, self.author_id),
+                )
+                conn.commit()
+                await interaction.response.send_message(
+                    f"✅ GrowID registered: {new_name}", ephemeral=True
+                )
+        finally:
+            processing_locks.discard(self.author_id)
 
 
 # ============================================================
@@ -230,157 +245,171 @@ class BuyModal(Modal, title="Enter Amount"):
         self.add_item(self.qty_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        async with BUY_LOCK:
-            # Validasi amount
-            try:
-                amount = int(str(self.qty_input.value).strip())
-                if amount <= 0:
-                    raise ValueError
-            except Exception:
-                await interaction.response.send_message(
-                    "❌ Invalid amount (harus angka > 0).", ephemeral=True
-                )
-                return
-
-            # Validasi user
-            uid = self.author.id
-            c.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            u = c.fetchone()
-            if not u:
-                await interaction.response.send_message(
-                    "❌ Register dulu (SET GROWID).", ephemeral=True
-                )
-                return
-            balance = int(u[0] or 0)
-
-            # Cek stock & harga
-            c.execute("SELECT COUNT(*) FROM stock_items WHERE kode=?", (self.kode,))
-            stok = int(c.fetchone()[0] or 0)
-            if stok < amount:
-                await interaction.response.send_message(
-                    f"❌ Stock tidak cukup. Tersisa: {stok}", ephemeral=True
-                )
-                return
-
-            c.execute("SELECT harga FROM stock WHERE kode=?", (self.kode,))
-            h = c.fetchone()
-            if not h:
-                await interaction.response.send_message(
-                    "❌ Invalid product code.", ephemeral=True
-                )
-                return
-            price = int(h[0])
-            total = price * amount
-            if balance < total:
-                await interaction.response.send_message(
-                    "❌ Balance kurang.", ephemeral=True
-                )
-                return
-
-            # Ambil items
-            c.execute(
-                "SELECT id, nama_barang FROM stock_items WHERE kode=? ORDER BY id LIMIT ?",
-                (self.kode, amount),
+        # 1. Cek Lock User
+        if self.author.id in processing_locks:
+            await interaction.response.send_message(
+                "⏳ Transaksi sebelumnya masih diproses. Tunggu sebentar...",
+                ephemeral=True
             )
-            items = c.fetchall()
+            return
 
-            ids = [str(x[0]) for x in items]
-            if not ids:
-                await interaction.response.send_message(
-                    "❌ Stock berubah, coba lagi.", ephemeral=True
-                )
-                return
-            bought_names = "\n".join([x[1] for x in items])
+        # 2. Lock
+        processing_locks.add(self.author.id)
 
+        try:
+            async with BUY_LOCK:
+                # Validasi amount
+                try:
+                    amount = int(str(self.qty_input.value).strip())
+                    if amount <= 0:
+                        raise ValueError
+                except Exception:
+                    await interaction.response.send_message(
+                        "❌ Invalid amount (harus angka > 0).", ephemeral=True
+                    )
+                    return
 
+                # Validasi user
+                uid = self.author.id
+                c.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+                u = c.fetchone()
+                if not u:
+                    await interaction.response.send_message(
+                        "❌ Register dulu (SET GROWID).", ephemeral=True
+                    )
+                    return
+                balance = int(u[0] or 0)
 
-            c.execute("SELECT poin FROM users WHERE user_id = ?", (uid,))
-            row = c.fetchone()
+                # Cek stock & harga
+                c.execute("SELECT COUNT(*) FROM stock_items WHERE kode=?", (self.kode,))
+                stok = int(c.fetchone()[0] or 0)
+                if stok < amount:
+                    await interaction.response.send_message(
+                        f"❌ Stock tidak cukup. Tersisa: {stok}", ephemeral=True
+                    )
+                    return
 
-            poin_sekarang = row[0]
-            poin_after = poin_sekarang + total
-            wl_dari_poin = poin_after // 5
-            sisa_poin = poin_after % 5
+                c.execute("SELECT harga FROM stock WHERE kode=?", (self.kode,))
+                h = c.fetchone()
+                if not h:
+                    await interaction.response.send_message(
+                        "❌ Invalid product code.", ephemeral=True
+                    )
+                    return
+                price = int(h[0])
+                total = price * amount
+                if balance < total:
+                    await interaction.response.send_message(
+                        "❌ Balance kurang.", ephemeral=True
+                    )
+                    return
 
-            new_balance = (balance - total)
-            await interaction.response.defer(ephemeral=True)
-
-            # DM wajib sukses
-            try:
-                msg = (
-                    "```🛒 Purchase Success!\n"
-                    "--------------------------\n"
-                    f"Code   : {self.kode}\n"
-                    f"Amount : {amount}\n"
-                    f"Price  : {price}\n"
-                    f"Total  : {total}\n"
-                    f"Balance: {new_balance}\n\n"
-                    f"📦 Items:\n{bought_names}```"
-                )
-                await self.author.send(msg)
-                await self.author.send(
-                    f"🔄 Konversi poin selesai!\n"
-                    f"+{wl_dari_poin} WL dari poin\n"
-                    f"WL Kamu Sekarang: {new_balance + wl_dari_poin}\n"
-                    f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
-                )
-            except Exception:
-                await interaction.followup.send(
-                    "❌ DM kamu mati. Pembelian dibatalkan.", ephemeral=True
-                )
-                return
-
-            # Commit transaksi
-            c.execute(
-                f"DELETE FROM stock_items WHERE id IN ({','.join(['?'] * len(ids))})",
-                ids
-            )
-            c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
-                  (new_balance + wl_dari_poin, sisa_poin, uid,))
-            
-            c.execute(
-                "INSERT INTO transactions (user_id, kode, jumlah) VALUES (?, ?, ?)",
-                (uid, self.kode, amount)
-            )
-            transaction_id = c.lastrowid  # ambil order number
-
-            # Simpan detail item yang dibeli
-            for _, nama_barang in items:
+                # Ambil items
                 c.execute(
-                    "INSERT INTO transaction_items (transaction_id, nama_barang) VALUES (?, ?)",
-                    (transaction_id, nama_barang)
+                    "SELECT id, nama_barang FROM stock_items WHERE kode=? ORDER BY id LIMIT ?",
+                    (self.kode, amount),
                 )
+                items = c.fetchall()
 
-            conn.commit()
+                ids = [str(x[0]) for x in items]
+                if not ids:
+                    await interaction.response.send_message(
+                        "❌ Stock berubah, coba lagi.", ephemeral=True
+                    )
+                    return
+                bought_names = "\n".join([x[1] for x in items])
 
-            # ✅ Tambahkan role BUY ke pembeli
-            try:
-                guild = interaction.guild
-                role = guild.get_role(839981629044555853)  # Role "Buy"
-                if role:
-                    await self.author.add_roles(role)
-                    print(f"[DEBUG] Role 'Buy' diberikan ke {self.author}.")
-                else:
-                    print("[WARN] Role 'Buy' tidak ditemukan di server.")
-            except Exception as e:
-                print(f"[ERROR] Gagal memberi role 'Buy': {e}")
 
-            # ✅ Kirim testimoni ke channel seller
-            channel_id = 839981637567643668  # ganti sesuai channel ID testimoni
-            channel = bot.get_channel(channel_id)
-            if channel:
-                embed = discord.Embed(
-                    title=f"#Order Number: {transaction_id}",
-                    color=discord.Color.gold()
+
+                c.execute("SELECT poin FROM users WHERE user_id = ?", (uid,))
+                row = c.fetchone()
+
+                poin_sekarang = row[0]
+                poin_after = poin_sekarang + total
+                wl_dari_poin = poin_after // 5
+                sisa_poin = poin_after % 5
+
+                new_balance = (balance - total)
+                await interaction.response.defer(ephemeral=True)
+
+                # DM wajib sukses
+                try:
+                    msg = (
+                        "```🛒 Purchase Success!\n"
+                        "--------------------------\n"
+                        f"Code   : {self.kode}\n"
+                        f"Amount : {amount}\n"
+                        f"Price  : {price}\n"
+                        f"Total  : {total}\n"
+                        f"Balance: {new_balance}\n\n"
+                        f"📦 Items:\n{bought_names}```"
+                    )
+                    await self.author.send(msg)
+                    await self.author.send(
+                        f"🔄 Konversi poin selesai!\n"
+                        f"+{wl_dari_poin} WL dari poin\n"
+                        f"WL Kamu Sekarang: {new_balance + wl_dari_poin}\n"
+                        f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
+                    )
+                except Exception:
+                    await interaction.followup.send(
+                        "❌ DM kamu mati. Pembelian dibatalkan.", ephemeral=True
+                    )
+                    return
+
+                # Commit transaksi
+                c.execute(
+                    f"DELETE FROM stock_items WHERE id IN ({','.join(['?'] * len(ids))})",
+                    ids
                 )
-                embed.add_field(name="<a:megaphone:1419515391851626580> Pembeli", value=self.author.mention, inline=False)
-                embed.add_field(name="Produk <a:menkrep:1122531571098980394>", value=f"{amount} {self.kode}", inline=False)
-                embed.add_field(name="Total Price", value=f"{fmt_wl(total)} <a:world_lock:1419515667773657109>", inline=False)
-                embed.set_footer(text="Thanks For Purchasing Our Product(s)")
-                await channel.send(embed=embed)
+                c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
+                      (new_balance + wl_dari_poin, sisa_poin, uid,))
+                
+                c.execute(
+                    "INSERT INTO transactions (user_id, kode, jumlah) VALUES (?, ?, ?)",
+                    (uid, self.kode, amount)
+                )
+                transaction_id = c.lastrowid  # ambil order number
 
-            # Debug log
-            print(f"[DEBUG] Transaksi {transaction_id} oleh {self.author} berhasil. Testimoni dikirim ke {channel_id}.")
+                # Simpan detail item yang dibeli
+                for _, nama_barang in items:
+                    c.execute(
+                        "INSERT INTO transaction_items (transaction_id, nama_barang) VALUES (?, ?)",
+                        (transaction_id, nama_barang)
+                    )
+
+                conn.commit()
+
+                # ✅ Tambahkan role BUY ke pembeli
+                try:
+                    guild = interaction.guild
+                    role = guild.get_role(839981629044555853)  # Role "Buy"
+                    if role:
+                        await self.author.add_roles(role)
+                        print(f"[DEBUG] Role 'Buy' diberikan ke {self.author}.")
+                    else:
+                        print("[WARN] Role 'Buy' tidak ditemukan di server.")
+                except Exception as e:
+                    print(f"[ERROR] Gagal memberi role 'Buy': {e}")
+
+                # ✅ Kirim testimoni ke channel seller
+                channel_id = 839981637567643668  # ganti sesuai channel ID testimoni
+                channel = bot.get_channel(channel_id)
+                if channel:
+                    embed = discord.Embed(
+                        title=f"#Order Number: {transaction_id}",
+                        color=discord.Color.gold()
+                    )
+                    embed.add_field(name="<a:megaphone:1419515391851626580> Pembeli", value=self.author.mention, inline=False)
+                    embed.add_field(name="Produk <a:menkrep:1122531571098980394>", value=f"{amount} {self.kode}", inline=False)
+                    embed.add_field(name="Total Price", value=f"{fmt_wl(total)} <a:world_lock:1419515667773657109>", inline=False)
+                    embed.set_footer(text="Thanks For Purchasing Our Product(s)")
+                    await channel.send(embed=embed)
+
+                # Debug log
+                print(f"[DEBUG] Transaksi {transaction_id} oleh {self.author} berhasil. Testimoni dikirim ke {channel_id}.")
+        finally:
+            processing_locks.discard(self.author.id)
 
 
 # ============================================================
@@ -403,115 +432,129 @@ class BuyPOModal(Modal, title="Enter PO Amount (Max 10)"):
         self.add_item(self.qty_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        async with BUY_LOCK:
-            uid = self.author.id
-            # Harus terdaftar
-            c.execute("SELECT nama FROM users WHERE user_id=?", (uid,))
-            row = c.fetchone()
-            if not row:
-                await interaction.response.send_message(
-                    "❌ Kamu belum register. Klik **SET GROWID**.", ephemeral=True
-                )
-                return
-            growid = row[0]
-
-            # Amount 1..10
-            try:
-                amt = int(str(self.qty_input.value).strip())
-                if amt <= 0 or amt > 10:
-                    raise ValueError
-            except Exception:
-                await interaction.response.send_message(
-                    "❌ Amount harus 1–10.", ephemeral=True
-                )
-                return
-
-            # Cek total waiting existing user utk kode ini
-            c.execute(
-                """
-                SELECT COALESCE(SUM(amount),0)
-                FROM preorders
-                WHERE user_id=? AND kode=? AND status='waiting'
-            """,
-                (uid, self.kode),
+        # 1. Cek Lock User
+        if self.author.id in processing_locks:
+            await interaction.response.send_message(
+                "⏳ Transaksi sebelumnya masih diproses. Tunggu sebentar...",
+                ephemeral=True
             )
-            waiting_total = int(c.fetchone()[0] or 0)
-            if waiting_total >= 10 or waiting_total + amt > 10:
-                await interaction.response.send_message(
-                    "❌ Max PO 10 per produk (kamu sudah penuh).", ephemeral=True
-                )
-                return
+            return
 
-                    # Ambil harga produk
-            c.execute("SELECT harga FROM stock WHERE kode=?", (self.kode,))
-            h = c.fetchone()
-            if not h:
-                await interaction.response.send_message("❌ Produk tidak valid.", ephemeral=True)
-                return
-            price = int(h[0])
-            total = price * amt
+        # 2. Lock
+        processing_locks.add(self.author.id)
 
-            # Ambil saldo user
-            c.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
-            row_balance = c.fetchone()
-            balance = int(row_balance[0] or 0)
+        try:
+            async with BUY_LOCK:
+                uid = self.author.id
+                # Harus terdaftar
+                c.execute("SELECT nama FROM users WHERE user_id=?", (uid,))
+                row = c.fetchone()
+                if not row:
+                    await interaction.response.send_message(
+                        "❌ Kamu belum register. Klik **SET GROWID**.", ephemeral=True
+                    )
+                    return
+                growid = row[0]
 
-            # Cek saldo cukup atau tidak
-            if balance < total:
-                await interaction.response.send_message(
-                    f"❌ Saldo tidak cukup. Kamu butuh {fmt_wl(total)} WL, saldo kamu {fmt_wl(balance)} WL.",
-                    ephemeral=True
-                )
-                return
+                # Amount 1..10
+                try:
+                    amt = int(str(self.qty_input.value).strip())
+                    if amt <= 0 or amt > 10:
+                        raise ValueError
+                except Exception:
+                    await interaction.response.send_message(
+                        "❌ Amount harus 1–10.", ephemeral=True
+                    )
+                    return
 
-            # Potong saldo user
-            new_balance = balance - total
-            c.execute("UPDATE users SET balance=? WHERE user_id=?", (new_balance, uid))
-
-            # Insert PO waiting
-            c.execute(
-                """
-                INSERT INTO preorders (nama, user_id, kode, amount, status)
-                VALUES (?, ?, ?, ?, 'waiting')
+                # Cek total waiting existing user utk kode ini
+                c.execute(
+                    """
+                    SELECT COALESCE(SUM(amount),0)
+                    FROM preorders
+                    WHERE user_id=? AND kode=? AND status='waiting'
                 """,
-                (growid, uid, self.kode, amt),
-            )
-            po_id = c.lastrowid
-            conn.commit()
-
-
-            # Hitung nomor antrian
-            c.execute(
-                """
-                SELECT COUNT(*) FROM preorders
-                WHERE kode=? AND status='waiting'
-                AND created_at <= (SELECT created_at FROM preorders WHERE id=?)
-            """,
-                (self.kode, po_id),
-            )
-            queue_pos = int(c.fetchone()[0] or 1)
-
-            # DM konfirmasi PO (wajib sukses)
-            try:
-                msg = (
-                    "```📦 Pre Order Dicatat\n"
-                    "--------------------------\n"
-                    f"Produk  : {self.kode}\n"
-                    f"Jumlah  : {amt}\n"
-                    f"Status  : Menunggu stok\n"
-                    f"Antrian : #{queue_pos}```"
+                    (uid, self.kode),
                 )
-                await self.author.send(msg)
-                await interaction.response.send_message(
-                    "✅ PO dicatat. Cek DM untuk detail.", ephemeral=True
+                waiting_total = int(c.fetchone()[0] or 0)
+                if waiting_total >= 10 or waiting_total + amt > 10:
+                    await interaction.response.send_message(
+                        "❌ Max PO 10 per produk (kamu sudah penuh).", ephemeral=True
+                    )
+                    return
+
+                        # Ambil harga produk
+                c.execute("SELECT harga FROM stock WHERE kode=?", (self.kode,))
+                h = c.fetchone()
+                if not h:
+                    await interaction.response.send_message("❌ Produk tidak valid.", ephemeral=True)
+                    return
+                price = int(h[0])
+                total = price * amt
+
+                # Ambil saldo user
+                c.execute("SELECT balance FROM users WHERE user_id=?", (uid,))
+                row_balance = c.fetchone()
+                balance = int(row_balance[0] or 0)
+
+                # Cek saldo cukup atau tidak
+                if balance < total:
+                    await interaction.response.send_message(
+                        f"❌ Saldo tidak cukup. Kamu butuh {fmt_wl(total)} WL, saldo kamu {fmt_wl(balance)} WL.",
+                        ephemeral=True
+                    )
+                    return
+
+                # Potong saldo user
+                new_balance = balance - total
+                c.execute("UPDATE users SET balance=? WHERE user_id=?", (new_balance, uid))
+
+                # Insert PO waiting
+                c.execute(
+                    """
+                    INSERT INTO preorders (nama, user_id, kode, amount, status)
+                    VALUES (?, ?, ?, ?, 'waiting')
+                    """,
+                    (growid, uid, self.kode, amt),
                 )
-            except Exception:
-                # DM mati -> batalkan PO
-                c.execute("UPDATE preorders SET status='cancelled' WHERE id=?", (po_id,))
+                po_id = c.lastrowid
                 conn.commit()
-                await interaction.response.send_message(
-                    "❌ DM kamu mati, PO dibatalkan.", ephemeral=True
+
+
+                # Hitung nomor antrian
+                c.execute(
+                    """
+                    SELECT COUNT(*) FROM preorders
+                    WHERE kode=? AND status='waiting'
+                    AND created_at <= (SELECT created_at FROM preorders WHERE id=?)
+                """,
+                    (self.kode, po_id),
                 )
+                queue_pos = int(c.fetchone()[0] or 1)
+
+                # DM konfirmasi PO (wajib sukses)
+                try:
+                    msg = (
+                        "```📦 Pre Order Dicatat\n"
+                        "--------------------------\n"
+                        f"Produk  : {self.kode}\n"
+                        f"Jumlah  : {amt}\n"
+                        f"Status  : Menunggu stok\n"
+                        f"Antrian : #{queue_pos}```"
+                    )
+                    await self.author.send(msg)
+                    await interaction.response.send_message(
+                        "✅ PO dicatat. Cek DM untuk detail.", ephemeral=True
+                    )
+                except Exception:
+                    # DM mati -> batalkan PO
+                    c.execute("UPDATE preorders SET status='cancelled' WHERE id=?", (po_id,))
+                    conn.commit()
+                    await interaction.response.send_message(
+                        "❌ DM kamu mati, PO dibatalkan.", ephemeral=True
+                    )
+        finally:
+            processing_locks.discard(self.author.id)
 
 
 # ============================================================
@@ -658,8 +701,10 @@ from discord.ext import tasks
 # ============================================================
 # Setup hook
 # ============================================================
+_listener_added = False  # Flag untuk mencegah duplikat listener
+
 def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
-    global bot, c, conn, fmt_wl, PREFIX
+    global bot, c, conn, fmt_wl, PREFIX, _listener_added
     bot = _bot
     c = _c
     conn = _conn
@@ -673,21 +718,40 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     ensure_transaction_items_schema(c, conn)
     ensure_preorder_items_schema(c, conn)
     
-    # handler tombol
-    async def on_interaction(interaction: discord.Interaction): ...
-
-    bot.add_listener(on_interaction, "on_interaction")
-
-
+    # Hanya daftarkan listener sekali
+    if _listener_added:
+        return
+    _listener_added = True
+    
     # handler tombol
     async def on_interaction(interaction: discord.Interaction):
+        # HANYA PROSES TOMBOL / SELECT DI SINI
+        # ModalSubmit akan diproses oleh func on_submit di class Modal masing-masing
+        if interaction.type != discord.InteractionType.component:
+            return
+
         if not getattr(interaction, "data", None):
             return
         cid = interaction.data.get("custom_id", "")
         user = interaction.user
+        
+        # Hanya handle custom_id yang kita kenal (button dari StockView)
+        # Skip Select menu component yang di-handle oleh View callback
+        known_buttons = {"buy", "buy_po", "growid", "balance", "deposit"}
+        if cid not in known_buttons:
+            return
 
         
-# ====== CEK COOLDOWN ======
+# ====== CEK COOLDOWN & LOCK ======
+        # 1. Cek Lock (Sedang memproses transaksi lain?)
+        if user.id in processing_locks:
+            await interaction.response.send_message(
+                "⏳ Sedang memproses transaksi sebelumnya. Mohon tunggu...",
+                ephemeral=True
+            )
+            return
+
+        # 2. Cek Cooldown (Spam prevention)
         now = time.time()
         last = last_click.get(user.id, 0)
         diff = now - last
@@ -698,55 +762,60 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                 ephemeral=True,
             )
             return
-        # simpan timestamp baru
+            
+        # Lock user & update cooldown
+        processing_locks.add(user.id)
         last_click[user.id] = now
-        # ==========================
-
-        # BUY (lama)
-        if cid == "buy":
-            products = await fetch_products_for_select()
-            await interaction.response.send_message(
-                "🛒 Choose product:",
-                view=ProductSelectView(user, products=products),
-                ephemeral=True,
-            )
-            return
-
-        # BUY PO (baru)
-        if cid == "buy_po":
-            products = await fetch_products_for_select()
-            await interaction.response.send_message(
-                "🛒 Choose PO product (Max 10 per user):",
-                view=ProductSelectPOView(user, products=products),
-                ephemeral=True,
-            )
-            return
-
-        # SET GROWID
-        if cid == "growid":
-            await interaction.response.send_modal(GrowIDModal(user.id))
-            return
-
-        # Balance
-        if cid == "balance":
-            c.execute("SELECT nama, balance FROM users WHERE user_id=?", (user.id,))
-            r = c.fetchone()
-            if r:
-                await send_ephemeral_countdown(
-                    interaction,
-                    f"GrowID: {r[0]} | Balance: {fmt_wl(int(r[1] or 0))} WL",
+        
+        try:
+            # BUY (lama)
+            if cid == "buy":
+                products = await fetch_products_for_select()
+                await interaction.response.send_message(
+                    "🛒 Choose product:",
+                    view=ProductSelectView(user, products=products),
+                    ephemeral=True,
                 )
-            else:
-                await send_ephemeral_countdown(interaction, "❌ Kamu belum register.")
-            return
+                return
 
-        # Deposit info
-        if cid == "deposit":
-            emb = discord.Embed(title="💳 Deposit Info", color=discord.Color.gold())
-            emb.add_field(name="World", value="MODALMEKI")
-            emb.add_field(name="Name Bot", value="everyone")
-            await send_ephemeral_countdown(interaction, "ℹ️ Deposit info", embed=emb)
-            return
+            # BUY PO (baru)
+            if cid == "buy_po":
+                products = await fetch_products_for_select()
+                await interaction.response.send_message(
+                    "🛒 Choose PO product (Max 10 per user):",
+                    view=ProductSelectPOView(user, products=products),
+                    ephemeral=True,
+                )
+                return
+
+            # SET GROWID
+            if cid == "growid":
+                await interaction.response.send_modal(GrowIDModal(user.id))
+                return
+
+            # Balance
+            if cid == "balance":
+                c.execute("SELECT nama, balance FROM users WHERE user_id=?", (user.id,))
+                r = c.fetchone()
+                if r:
+                    await send_ephemeral_countdown(
+                        interaction,
+                        f"GrowID: {r[0]} | Balance: {fmt_wl(int(r[1] or 0))} WL",
+                    )
+                else:
+                    await send_ephemeral_countdown(interaction, "❌ Kamu belum register.")
+                return
+
+            # Deposit info
+            if cid == "deposit":
+                emb = discord.Embed(title="💳 Deposit Info", color=discord.Color.gold())
+                emb.add_field(name="World", value="MODALMEKI")
+                emb.add_field(name="Name Bot", value="everyone")
+                await send_ephemeral_countdown(interaction, "ℹ️ Deposit info", embed=emb)
+                return
+
+        finally:
+            processing_locks.discard(user.id)
 
     bot.add_listener(on_interaction, "on_interaction")
 
