@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 import importlib
 import pkgutil
+import io
 # from command import cmd_ltoken
 import asyncio # WAJIB: Import asyncio untuk create_task()
 
@@ -230,16 +231,20 @@ async def allocate_preorders(kode: str):
         try:
             # Gunakan fetch_user untuk mengambil user dari API Discord (bukan hanya cache)
             member = await bot.fetch_user(user_id)
+            
+            # Buat file txt untuk items
+            items_content = bought_names
+            items_file = io.BytesIO(items_content.encode('utf-8'))
+            
             dm_msg = (
                 "```🛒 Pre Order Success!\n"
                 "--------------------------\n"
                 f"Code   : {kode}\n"
                 f"Amount : {jatah}\n"
                 f"Price  : {price}\n"
-                f"Total  : {price*jatah}\n\n"
-                f"📦 Items:\n{bought_names}```"
+                f"Total  : {price*jatah}```"
             )
-            await member.send(dm_msg)
+            await member.send(dm_msg, file=discord.File(items_file, filename=f"{kode}_{jatah}items.txt"))
         except Exception as e:
             # DM gagal -> cancel PO & lanjut user berikutnya
             print(f"[ERROR] Gagal DM user {user_id}: {e} -> Auto Cancel & Refund PO {po_id}")
@@ -396,6 +401,10 @@ async def on_command_error(ctx, error):
     """Handle command errors gracefully."""
     if isinstance(error, commands.CheckFailure):
         await ctx.send("❌ Kamu tidak punya izin untuk pakai command ini.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Argumen `{error.param.name}` diperlukan. Cek usage: `{PREFIX}help {ctx.command.name}`")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"❌ Argumen tidak valid. Cek usage: `{PREFIX}help {ctx.command.name}`")
     else:
         # biar error lain tetap muncul di console
         raise error

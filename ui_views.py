@@ -16,6 +16,7 @@ import re
 import asyncio
 import discord
 import os
+import io
 from discord.ui import View, Button, Modal, TextInput, Select
 import time
 
@@ -334,6 +335,11 @@ class BuyModal(Modal, title="Enter Amount"):
 
                 # DM wajib sukses
                 try:
+                    # Buat file txt untuk items
+                    items_content = bought_names
+                    items_file = io.BytesIO(items_content.encode('utf-8'))
+                    items_file.name = f"{self.kode}_{amount}items.txt"
+                    
                     msg = (
                         "```🛒 Purchase Success!\n"
                         "--------------------------\n"
@@ -341,10 +347,9 @@ class BuyModal(Modal, title="Enter Amount"):
                         f"Amount : {amount}\n"
                         f"Price  : {price}\n"
                         f"Total  : {total}\n"
-                        f"Balance: {new_balance}\n\n"
-                        f"📦 Items:\n{bought_names}```"
+                        f"Balance: {new_balance}```"
                     )
-                    await self.author.send(msg)
+                    await self.author.send(msg, file=discord.File(items_file, filename=f"{self.kode}_{amount}items.txt"))
                     await self.author.send(
                         f"🔄 Konversi poin selesai!\n"
                         f"+{wl_dari_poin} WL dari poin\n"
@@ -383,12 +388,15 @@ class BuyModal(Modal, title="Enter Amount"):
                 # ✅ Tambahkan role BUY ke pembeli
                 try:
                     guild = interaction.guild
-                    role = guild.get_role(839981629044555853)  # Role "Buy"
-                    if role:
-                        await self.author.add_roles(role)
-                        print(f"[DEBUG] Role 'Buy' diberikan ke {self.author}.")
+                    if guild is None:
+                        print("[WARN] Guild is None (interaction from DM?)")
                     else:
-                        print("[WARN] Role 'Buy' tidak ditemukan di server.")
+                        role = guild.get_role(839981629044555853)  # Role "Buy"
+                        if role:
+                            await self.author.add_roles(role)
+                            print(f"[DEBUG] Role 'Buy' diberikan ke {self.author}.")
+                        else:
+                            print("[WARN] Role 'Buy' tidak ditemukan di server.")
                 except Exception as e:
                     print(f"[ERROR] Gagal memberi role 'Buy': {e}")
 
@@ -739,6 +747,10 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
         # Skip Select menu component yang di-handle oleh View callback
         known_buttons = {"buy", "buy_po", "growid", "balance", "deposit"}
         if cid not in known_buttons:
+            return
+        
+        # Skip jika interaction sudah di-respond (mencegah double response)
+        if interaction.response.is_done():
             return
 
         
