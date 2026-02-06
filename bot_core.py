@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import os
 import importlib
 import pkgutil
-from command import cmd_ltoken
+# from command import cmd_ltoken
 import asyncio # WAJIB: Import asyncio untuk create_task()
 
 load_dotenv()
@@ -315,11 +315,11 @@ async def on_ready():
     print(f"🤖 Bot ready as {bot.user}")
     
     # --- PERBAIKAN MONITOR LTOKEN DI SINI (Memulai monitor LToken dengan benar) ---
-    if not hasattr(bot, "ltoken_monitor_started"):
-        # cmd_ltoken sudah diimport di atas, bisa dipanggil langsung.
-        asyncio.create_task(cmd_ltoken.monitor_pending_orders_loop(bot, c, conn))
-        bot.ltoken_monitor_started = True
-        print("[DEBUG][ltoken] monitor_pending_orders_loop started successfully.")
+    # if not hasattr(bot, "ltoken_monitor_started"):
+    #     # cmd_ltoken sudah diimport di atas, bisa dipanggil langsung.
+    #     asyncio.create_task(cmd_ltoken.monitor_pending_orders_loop(bot, c, conn))
+    #     bot.ltoken_monitor_started = True
+    #     print("[DEBUG][ltoken] monitor_pending_orders_loop started successfully.")
     # --- AKHIR PERBAIKAN MONITOR ---
 
 

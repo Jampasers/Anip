@@ -145,15 +145,17 @@ class RefreshFileCog(commands.Cog):
         sem = asyncio.Semaphore(MAX_WORKERS)
 
         async def process_token(token_line: str) -> Tuple[bool, str]:
-            """Proses 1 token: debit → refresh → rollback jika gagal"""
-            if not db_debit(conn, user_id, 1):
-                return None, "SALDO_KURANG"
+            """Proses 1 token: refresh (GRATIS)"""
+            # if not db_debit(conn, user_id, 1):
+            #    return None, "SALDO_KURANG"
+            
             def work(): return _refresh_one_token(token_line, SURFERCID_API_KEY)
             ok, result = await loop.run_in_executor(None, work)
+            
             if ok:
                 return True, result
             else:
-                db_credit(conn, user_id, 1)
+                # db_credit(conn, user_id, 1) # Tidak perlu credit balik karena gratis
                 return False, result
 
         async def sem_task(line):
