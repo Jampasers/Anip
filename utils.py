@@ -1,11 +1,17 @@
 from discord.ext import commands
 import sqlite3
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DB_NAME = "discord_sqlite_bot.db"
 conn = sqlite3.connect(DB_NAME, check_same_thread=False)
 c = conn.cursor()
 
-ALLOWED_ID = ["698127357990404157", "629211566583185408"]
+# Load from .env
+ALLOWED_ID = os.getenv("ALLOWED_ADMIN_IDS", "").split(",")
+ROLE_BUY = int(os.getenv("ROLE_BUY", "0"))
 
 def is_allowed_user():
     def predicate(ctx):
@@ -15,8 +21,7 @@ def is_allowed_user():
 from discord import app_commands, Interaction
 def is_buyer_ltoken():
     def predicate(interaction: Interaction):
-        role_id = 839981629044555853  # ganti dengan role buyer-mu
-        return any(role.id == role_id for role in interaction.user.roles)
+        return any(role.id == ROLE_BUY for role in interaction.user.roles)
     return app_commands.check(predicate)
 
 

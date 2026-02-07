@@ -20,6 +20,13 @@ import os
 import io
 from discord.ui import View, Button, Modal, TextInput, Select
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Load IDs from .env
+ROLE_BUY = int(os.getenv("ROLE_BUY", "0"))
+CHANNEL_TESTIMONI = int(os.getenv("CHANNEL_TESTIMONI", "0"))
 
 # ===== Globals (diisi dari setup) =====
 bot = None
@@ -392,7 +399,7 @@ class BuyModal(Modal, title="Enter Amount"):
                     if guild is None:
                         print("[WARN] Guild is None (interaction from DM?)")
                     else:
-                        role = guild.get_role(839981629044555853)  # Role "Buy"
+                        role = guild.get_role(ROLE_BUY)  # Role "Buy"
                         if role:
                             await self.author.add_roles(role)
                             print(f"[DEBUG] Role 'Buy' diberikan ke {self.author}.")
@@ -402,8 +409,7 @@ class BuyModal(Modal, title="Enter Amount"):
                     print(f"[ERROR] Gagal memberi role 'Buy': {e}")
 
                 # ✅ Kirim testimoni ke channel seller
-                channel_id = 839981637567643668  # ganti sesuai channel ID testimoni
-                channel = bot.get_channel(channel_id)
+                channel = bot.get_channel(CHANNEL_TESTIMONI)
                 if channel:
                     embed = discord.Embed(
                         title=f"#Order Number: {transaction_id}",

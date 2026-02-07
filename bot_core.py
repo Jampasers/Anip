@@ -168,7 +168,9 @@ for _, module_name, _ in pkgutil.iter_modules([commands_dir]):
 # Import UI views and initialize last so it can hook listeners
 import ui_views
 
-TARGET_CHANNEL_ID = 1415979811154821170  # ganti dengan ID channel webhook game
+TARGET_CHANNEL_ID = int(os.getenv("CHANNEL_WEBHOOK_GAME", "0"))  # Channel webhook game
+CHANNEL_TESTIMONI = int(os.getenv("CHANNEL_TESTIMONI", "0"))  # Channel testimoni
+WEBHOOK_AUTHOR_ID = int(os.getenv("WEBHOOK_AUTHOR_ID", "0"))  # Webhook author ID
 
 
 
@@ -282,8 +284,7 @@ async def allocate_preorders(kode: str):
         if jatah == amount:
             # terpenuhi semua
             c.execute("UPDATE preorders SET status='success' WHERE id=?", (po_id,))
-            channel_od = 839981637567643668
-            channel = bot.get_channel(channel_od)
+            channel = bot.get_channel(CHANNEL_TESTIMONI)
             if channel:
                 embed = discord.Embed(
                     title=f"#Pesanan Pre Order Number: {transaction_id}",
@@ -358,7 +359,7 @@ async def on_message(message: discord.Message):
     if len(parts) < 2:
         await bot.process_commands(message)
         return
-    if message.author.id != 1415979849121796176:
+    if message.author.id != WEBHOOK_AUTHOR_ID:
         return
     raw_name = parts[0]
     try:

@@ -3,6 +3,10 @@ import re
 import shlex
 from utils import is_allowed_user, is_maintenance
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+CHANNEL_RESTOCK_NOTIF = int(os.getenv("CHANNEL_RESTOCK_NOTIF", "0"))
 
 def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the addstock command, which adds new products or items."""
@@ -87,7 +91,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
             f"Added  : {added}\n"
             f"Total  : {total}```"
         )
-        ch = bot.get_channel(1419609322886791168)
+        ch = bot.get_channel(CHANNEL_RESTOCK_NOTIF)
         if ch:
             await ch.send(
                 "@everyone\n"
