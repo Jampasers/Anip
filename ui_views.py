@@ -1,4 +1,4 @@
-# ui_views.py — full script with BUY + BUY PO (Pre Order) system
+# ui_views.py — full script with BUY + BUY PO (Pre Order) + DEPO QRIS system
 # --------------------------------------------------------------
 # Fitur:
 # - SET GROWID
@@ -11,6 +11,7 @@
 #   * DM hasil (success / partial). Kalau DM gagal saat fulfillment -> cancel & kembalikan stok
 # - ProductSelect (BUY) & ProductSelectPO (BUY PO)
 # - StockView dengan tombol BUY PO di samping BUY
+# - DEPO QRIS (deposit via Pakasir QRIS)
 
 import re
 import asyncio
@@ -566,6 +567,66 @@ class BuyPOModal(Modal, title="Enter PO Amount (Max 10)"):
 
 
 # ============================================================
+# DEPO QRIS Modal (Deposit via Pakasir QRIS)
+# ============================================================
+class DepoQRISModal(Modal, title="Deposit QRIS"):
+    """
+    Modal untuk input jumlah Rupiah yang ingin di-deposit via QRIS.
+    - Minimal deposit: Rp 500
+    - Rate: 1 WL = Rp 2.1
+    """
+
+    def __init__(self, author: discord.Member):
+        super().__init__()
+        self.author = author
+        self.rupiah_input = TextInput(
+            label="Jumlah Rupiah (Min Rp 500)",
+            placeholder="Contoh: 500 (= 238 WL)",
+            required=True,
+            max_length=10,
+        )
+        self.add_item(self.rupiah_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        # 1. Cek Lock User
+        if self.author.id in processing_locks:
+            await interaction.response.send_message(
+                "⏳ Transaksi sebelumnya masih diproses. Tunggu sebentar...",
+                ephemeral=True
+            )
+            return
+
+        # 2. Lock
+        processing_locks.add(self.author.id)
+
+        try:
+            # Validasi input
+            try:
+                rupiah_amount = int(str(self.rupiah_input.value).strip())
+                if rupiah_amount <= 0:
+                    raise ValueError
+            except Exception:
+                await interaction.response.send_message(
+                    "❌ Jumlah Rupiah tidak valid (harus angka > 0).", ephemeral=True
+                )
+                return
+
+            # Defer untuk proses async
+            await interaction.response.defer(ephemeral=True)
+
+            # Import dan panggil process_qris_deposit dari cmd_depoqris
+            try:
+                from command import cmd_depoqris
+                await cmd_depoqris.process_qris_deposit_rupiah(interaction, rupiah_amount)
+            except Exception as e:
+                print(f"[QRIS] Error: {e}")
+                await interaction.followup.send(
+                    "❌ Terjadi kesalahan saat memproses deposit QRIS.",
+                    ephemeral=True
+                )
+        finally:
+            processing_locks.discard(self.author.id)
+# ============================================================
 # Product Selectors
 # ============================================================
 class ProductSelect(Select):
@@ -653,7 +714,7 @@ class ProductSelectPOView(View):
 
 
 # ============================================================
-# Stock View (dengan tombol BUY PO)
+# Stock View (dengan tombol BUY PO dan DEPO QRIS)
 # ============================================================
 class StockView(View):
     def __init__(self):
@@ -665,10 +726,16 @@ class StockView(View):
         self.add_item(
             Button(label="Buy PO", style=discord.ButtonStyle.green, custom_id="buy_po",
                 disabled=False)
-        )  # << NEW
+        )
         self.add_item(
             Button(
-                label="Deposit", style=discord.ButtonStyle.blurple, custom_id="deposit",
+                label="Deposit WL", style=discord.ButtonStyle.blurple, custom_id="deposit",
+                disabled=self.is_mt()
+            )
+        )
+        self.add_item(
+            Button(
+                label="Depo QRIS", style=discord.ButtonStyle.blurple, custom_id="depo_qris",
                 disabled=self.is_mt()
             )
         )
@@ -745,7 +812,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
         
         # Hanya handle custom_id yang kita kenal (button dari StockView)
         # Skip Select menu component yang di-handle oleh View callback
-        known_buttons = {"buy", "buy_po", "growid", "balance", "deposit"}
+        known_buttons = {"buy", "buy_po", "growid", "balance", "deposit", "depo_qris"}
         if cid not in known_buttons:
             return
         
@@ -824,6 +891,11 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                 emb.add_field(name="World", value="MODALMEKI")
                 emb.add_field(name="Name Bot", value="everyone")
                 await send_ephemeral_countdown(interaction, "ℹ️ Deposit info", embed=emb)
+                return
+
+            # Depo QRIS (baru)
+            if cid == "depo_qris":
+                await interaction.response.send_modal(DepoQRISModal(user))
                 return
 
         finally:
