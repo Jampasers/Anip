@@ -420,9 +420,21 @@ class BuyModal(Modal, title="Enter Amount"):
                     embed.add_field(name="Total Price", value=f"{fmt_wl(total)} <a:world_lock:1419515667773657109>", inline=False)
                     embed.set_footer(text="Thanks For Purchasing Our Product(s)")
                     await channel.send(embed=embed)
+                    sent_channel_id = channel.id
+                else:
+                    sent_channel_id = None
+
+                # Confirm to buyer in interaction
+                try:
+                    await interaction.followup.send(
+                        f"Purchase success. Check your DM for items. Order: {transaction_id}.",
+                        ephemeral=True,
+                    )
+                except Exception as e:
+                    print(f"[WARN] Gagal kirim konfirmasi interaction: {e}")
 
                 # Debug log
-                print(f"[DEBUG] Transaksi {transaction_id} oleh {self.author} berhasil. Testimoni dikirim ke {channel_id}.")
+                print(f"[DEBUG] Transaksi {transaction_id} oleh {self.author} berhasil. Testimoni dikirim ke {sent_channel_id}.")
         finally:
             processing_locks.discard(self.author.id)
 
