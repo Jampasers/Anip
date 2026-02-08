@@ -27,7 +27,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
         )
         embed.set_footer(text=f" Last Update: {datetime.datetime.now().strftime('%H:%M:%S')}")
         if not rows:
-            embed.description = "❌ Belum ada stok barang."
+            embed.description = "❌ **Belum ada stok barang.**"
             return embed
         desc_parts = []
         for (kode, judul, jumlah, harga) in rows:
@@ -44,14 +44,14 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 )
                 sold = c.fetchone()[0]
             part = (
-                f"<a:toa:1122531485090582619>  {judul} ({kode.upper()})\n"
-                f"<a:panah1:1419515217892606053>  Stock: {jumlah}\n"
-                f"<a:panah1:1419515217892606053>  Price: {fmt_wl(harga)} <a:world_lock:1419515667773657109>\n"
-                f"<a:panah1:1419515217892606053>  Product Sold: {sold}"
+                f"<a:toa:1122531485090582619>  **{judul}** (`{kode.upper()}`)\n"
+                f"<a:panah1:1419515217892606053>  **Stock:** `{jumlah}`\n"
+                f"<a:panah1:1419515217892606053>  **Price:** `{fmt_wl(harga)}` <a:world_lock:1419515667773657109>\n"
+                f"<a:panah1:1419515217892606053>  **Product Sold:** `{sold}`"
             )
             desc_parts.append(part)
         # Gabungkan antar produk dengan garis pemisah
-        embed.description = "\n========================================\n".join(desc_parts)
+        embed.description = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n".join(desc_parts)
         return embed
 
     # @bot.command(name="stock")

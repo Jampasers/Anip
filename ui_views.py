@@ -227,7 +227,7 @@ class GrowIDModal(Modal, title="Set / Change GrowID"):
                 )
                 conn.commit()
                 await interaction.response.send_message(
-                    f"✅ GrowID updated: {new_name}", ephemeral=True
+                    f"✅ **GrowID updated:** `{new_name}`", ephemeral=True
                 )
             else:
                 c.execute(
@@ -236,7 +236,7 @@ class GrowIDModal(Modal, title="Set / Change GrowID"):
                 )
                 conn.commit()
                 await interaction.response.send_message(
-                    f"✅ GrowID registered: {new_name}", ephemeral=True
+                    f"✅ **GrowID registered:** `{new_name}`", ephemeral=True
                 )
         finally:
             processing_locks.discard(self.author_id)
@@ -349,20 +349,20 @@ class BuyModal(Modal, title="Enter Amount"):
                     items_file.name = f"{self.kode}_{amount}items.txt"
                     
                     msg = (
-                        "```🛒 Purchase Success!\n"
-                        "--------------------------\n"
-                        f"Code   : {self.kode}\n"
-                        f"Amount : {amount}\n"
-                        f"Price  : {price}\n"
-                        f"Total  : {total}\n"
-                        f"Balance: {new_balance}```"
+                        "**🛒 Purchase Success!**\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        f"**Code   :** `{self.kode}`\n"
+                        f"**Amount :** `{amount}`\n"
+                        f"**Price  :** `{price} WL`\n"
+                        f"**Total  :** `{total} WL`\n"
+                        f"**Balance:** `{new_balance} WL`"
                     )
                     await self.author.send(msg, file=discord.File(items_file, filename=f"{self.kode}_{amount}items.txt"))
                     await self.author.send(
-                        f"🔄 Konversi poin selesai!\n"
-                        f"+{wl_dari_poin} WL dari poin\n"
-                        f"WL Kamu Sekarang: {new_balance + wl_dari_poin}\n"
-                        f"🪙 Sisa poin kamu sekarang: {sisa_poin}"
+                        f"**🔄 Konversi Poin Selesai!**\n"
+                        f"➕ **+{wl_dari_poin} WL** dari poin\n"
+                        f"💰 **WL Kamu Sekarang:** `{new_balance + wl_dari_poin} WL`\n"
+                        f"🪙 **Sisa Poin:** `{sisa_poin}`"
                     )
                 except Exception:
                     await interaction.followup.send(
@@ -550,16 +550,16 @@ class BuyPOModal(Modal, title="Enter PO Amount (Max 10)"):
                 # DM konfirmasi PO (wajib sukses)
                 try:
                     msg = (
-                        "```📦 Pre Order Dicatat\n"
-                        "--------------------------\n"
-                        f"Produk  : {self.kode}\n"
-                        f"Jumlah  : {amt}\n"
-                        f"Status  : Menunggu stok\n"
-                        f"Antrian : #{queue_pos}```"
+                        "**📦 Pre Order Dicatat**\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        f"**Produk  :** `{self.kode}`\n"
+                        f"**Jumlah  :** `{amt}`\n"
+                        f"**Status  :** 🟡 Menunggu stok\n"
+                        f"**Antrian :** `#{queue_pos}`"
                     )
                     await self.author.send(msg)
                     await interaction.response.send_message(
-                        "✅ PO dicatat. Cek DM untuk detail.", ephemeral=True
+                        "✅ **PO dicatat!** Cek DM untuk detail.", ephemeral=True
                     )
                 except Exception:
                     # DM mati -> batalkan PO
@@ -857,7 +857,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
             if cid == "buy":
                 products = await fetch_products_for_select()
                 await interaction.response.send_message(
-                    "🛒 Choose product:",
+                    "**🛒 Pilih Produk:**",
                     view=ProductSelectView(user, products=products),
                     ephemeral=True,
                 )
@@ -867,7 +867,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
             if cid == "buy_po":
                 products = await fetch_products_for_select()
                 await interaction.response.send_message(
-                    "🛒 Choose PO product (Max 10 per user):",
+                    "**🛒 Pilih Produk PO (Max 10 per user):**",
                     view=ProductSelectPOView(user, products=products),
                     ephemeral=True,
                 )
@@ -885,18 +885,18 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                 if r:
                     await send_ephemeral_countdown(
                         interaction,
-                        f"GrowID: {r[0]} | Balance: {fmt_wl(int(r[1] or 0))} WL",
+                        f"**🎮 GrowID:** `{r[0]}`\n**💰 Balance:** `{fmt_wl(int(r[1] or 0))} WL`",
                     )
                 else:
-                    await send_ephemeral_countdown(interaction, "❌ Kamu belum register.")
+                    await send_ephemeral_countdown(interaction, "❌ **Kamu belum register!**")
                 return
 
             # Deposit info
             if cid == "deposit":
-                emb = discord.Embed(title="💳 Deposit Info", color=discord.Color.gold())
-                emb.add_field(name="World", value="MODALMEKI")
-                emb.add_field(name="Name Bot", value="everyone")
-                await send_ephemeral_countdown(interaction, "ℹ️ Deposit info", embed=emb)
+                emb = discord.Embed(title="💳 **Deposit Info**", color=discord.Color.gold())
+                emb.add_field(name="🌍 **World**", value="`MODALMEKI`")
+                emb.add_field(name="🤖 **Name Bot**", value="`everyone`")
+                await send_ephemeral_countdown(interaction, "**ℹ️ Deposit Info**", embed=emb)
                 return
 
             # Depo QRIS (baru)

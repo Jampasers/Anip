@@ -19,9 +19,12 @@ PAKASIR_SLUG = os.getenv("PAKASIR_SLUG", "")
 PAKASIR_API_KEY = os.getenv("PAKASIR_API_KEY", "")
 PAKASIR_BASE_URL = "https://app.pakasir.com/api"
 
-# Pricing: 1 WL = 2.1 Rupiah
+# Pricing: 1 WL = 2.1 Rupiah (100 WL = 210 Rupiah)
 WL_TO_RUPIAH = 2.1
 MIN_DEPOSIT_RUPIAH = 500
+
+# Log Channel
+CHANNEL_QRIS_SUCCESS_LOG = int(os.getenv("CHANNEL_QRIS_SUCCESS_LOG", "0"))
 
 # Globals
 bot = None
@@ -47,6 +50,12 @@ def ensure_qris_deposits_schema(cur, connection):
         )
     """)
     connection.commit()
+
+def mask_growid(growid: str) -> str:
+    """Mask GrowID for privacy - show first letter + xxx. Example: 'PlayerName' -> 'Pxxx'"""
+    if not growid or len(growid) < 1:
+        return "xxx"
+    return f"{growid[0].upper()}xxx"
 
 def convert_wl_to_rupiah(wl_amount: int) -> int:
     """Convert WL to Rupiah (1 WL = 2.1 Rupiah)."""
@@ -234,10 +243,11 @@ async def monitor_pending_deposits():
                 """, (dep_id,))
                 
                 # Add balance to user
-                c.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+                c.execute("SELECT balance, nama FROM users WHERE user_id = ?", (user_id,))
                 row = c.fetchone()
                 if row:
                     new_balance = (row[0] or 0) + amount_wl
+                    growid = row[1] or "Unknown"
                     c.execute("UPDATE users SET balance = ? WHERE user_id = ?", (new_balance, user_id))
                     conn.commit()
                     
@@ -257,6 +267,31 @@ async def monitor_pending_deposits():
                         await user.send(embed=embed)
                     except Exception as e:
                         print(f"[QRIS] Failed to notify user {user_id}: {e}")
+                    
+                    # Send log to success channel
+                    if CHANNEL_QRIS_SUCCESS_LOG:
+                        try:
+                            log_channel = bot.get_channel(CHANNEL_QRIS_SUCCESS_LOG)
+                            if log_channel:
+                                log_embed = discord.Embed(
+                                    title="💰 Transaksi QRIS Berhasil",
+                                    color=discord.Color.green(),
+                                    timestamp=datetime.now()
+                                )
+                                log_embed.add_field(name="📋 Order ID", value=f"`{order_id}`", inline=False)
+                                log_embed.add_field(name="👤 User", value=f"<@{user_id}>", inline=True)
+                                log_embed.add_field(name="🎮 GrowID", value=mask_growid(growid), inline=True)
+                                log_embed.add_field(name="💵 Total Bayar", value=f"Rp {amount_rupiah:,}".replace(",", "."), inline=True)
+                                log_embed.add_field(name="💎 WL Diterima", value=f"{fmt_wl(amount_wl)} WL", inline=True)
+                                log_embed.add_field(
+                                    name="📊 Konversi",
+                                    value=f"```Rp {amount_rupiah:,} → {fmt_wl(amount_wl)} WL\n(Rate: 100 WL = Rp 210)```".replace(",", "."),
+                                    inline=False
+                                )
+                                log_embed.set_footer(text="QRIS Deposit System")
+                                await log_channel.send(embed=log_embed)
+                        except Exception as e:
+                            print(f"[QRIS] Failed to send log to channel: {e}")
                 else:
                     conn.commit()
                     
