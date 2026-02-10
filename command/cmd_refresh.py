@@ -100,6 +100,8 @@ class RefreshFileCog(commands.Cog):
         name="refresh",
         description="Upload file .txt berisi token (1 token per baris) untuk di-refresh."
     )
+    @app_commands.guild_only()
+    @app_commands.default_permissions(send_messages=True)
     @app_commands.describe(file="File .txt berisi token")
     async def refresh(self, interaction: discord.Interaction, file: discord.Attachment):
         """Handler utama untuk perintah /refresh"""
@@ -285,7 +287,4 @@ class RefreshFileCog(commands.Cog):
 # REGISTER COG
 # ================================================================
 async def setup(bot: commands.Bot):
-    # Register command specifically for this guild to ensure immediate visibility
-    guild_id = 839981629044555847
-    guild_obj = discord.Object(id=guild_id)
-    await bot.add_cog(RefreshFileCog(bot), guilds=[guild_obj])
+    await bot.add_cog(RefreshFileCog(bot))
