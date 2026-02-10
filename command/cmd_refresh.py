@@ -285,4 +285,7 @@ class RefreshFileCog(commands.Cog):
 # REGISTER COG
 # ================================================================
 async def setup(bot: commands.Bot):
-    await bot.add_cog(RefreshFileCog(bot))
+    # Register command specifically for this guild to ensure immediate visibility
+    guild_id = 839981629044555847
+    guild_obj = discord.Object(id=guild_id)
+    await bot.add_cog(RefreshFileCog(bot), guilds=[guild_obj])
