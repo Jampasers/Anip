@@ -329,8 +329,14 @@ async def on_ready():
         if guild_id_raw:
             guild_id = int(guild_id_raw)
             guild = discord.Object(id=guild_id)
+            
+            # --- FORCE SYNC GLOBAL COMMANDS TO THIS GUILD ---
+            # Ini memaksa command global muncul di server ini tanpa menunggu update global discord (bisa 1 jam)
+            bot.tree.copy_global_to(guild=guild)
+            # ------------------------------------------------
+            
             guild_synced = await bot.tree.sync(guild=guild)
-            print(f"[SYNC] Guild {guild_id}: {len(guild_synced)} slash commands")
+            print(f"[SYNC] Guild {guild_id}: {len(guild_synced)} slash commands (forced global sync)")
     except Exception as e:
         print(f"[SYNC] Gagal sync guild command: {e}")
 
