@@ -333,10 +333,9 @@ class BuyModal(Modal, title="Enter Amount"):
                 c.execute("SELECT poin FROM users WHERE user_id = ?", (uid,))
                 row = c.fetchone()
 
-                poin_sekarang = row[0]
-                poin_after = poin_sekarang + total
-                wl_dari_poin = poin_after // 5
-                sisa_poin = poin_after % 5
+                poin_sekarang = int((row[0] if row else 0) or 0)
+                poin_after = poin_sekarang + amount
+                wl_dari_poin = amount
 
                 new_balance = (balance - total)
                 await interaction.response.defer(ephemeral=True)
@@ -362,7 +361,7 @@ class BuyModal(Modal, title="Enter Amount"):
                         f"**🔄 Konversi Poin Selesai!**\n"
                         f"➕ **+{wl_dari_poin} WL** dari poin\n"
                         f"💰 **WL Kamu Sekarang:** `{new_balance + wl_dari_poin} WL`\n"
-                        f"🪙 **Sisa Poin:** `{sisa_poin}`"
+                        f"🪙 **Total Poin:** `{poin_after}`"
                     )
                 except Exception:
                     await interaction.followup.send(
@@ -376,7 +375,7 @@ class BuyModal(Modal, title="Enter Amount"):
                     ids
                 )
                 c.execute("UPDATE users SET balance = ?, poin = ? WHERE user_id = ?",
-                      (new_balance + wl_dari_poin, sisa_poin, uid,))
+                      (new_balance + wl_dari_poin, poin_after, uid,))
                 
                 c.execute(
                     "INSERT INTO transactions (user_id, kode, jumlah) VALUES (?, ?, ?)",
