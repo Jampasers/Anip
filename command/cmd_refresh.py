@@ -100,7 +100,6 @@ class RefreshFileCog(commands.Cog):
         name="refresh",
         description="Upload file .txt berisi token (1 token per baris) untuk di-refresh."
     )
-    @app_commands.guild_only()
     @app_commands.default_permissions(send_messages=True)
     @app_commands.describe(file="File .txt berisi token")
     async def refresh(self, interaction: discord.Interaction, file: discord.Attachment):
