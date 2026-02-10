@@ -111,6 +111,29 @@ class RefreshFileCog(commands.Cog):
             await interaction.response.send_message("❌ Harap upload file .txt", ephemeral=True)
             return
 
+        # --- PERMISSION CHECK: Member of specific guild only ---
+        ALLOWED_GUILD_ID = 839981629044555847
+        guild = self.bot.get_guild(ALLOWED_GUILD_ID)
+        
+        if guild:
+            # Cek cache
+            member = guild.get_member(interaction.user.id)
+            if not member:
+                # Cek fetch (API) jika tidak ada di cache
+                try:
+                    member = await guild.fetch_member(interaction.user.id)
+                except:
+                    pass
+            
+            if not member:
+                await interaction.response.send_message("❌ Command ini khusus untuk member Official Server.", ephemeral=True)
+                return
+        else:
+            # Jika bot tidak ada di server tersebut
+            await interaction.response.send_message("❌ Bot error: Server utama tidak ditemukan/Bot belum join.", ephemeral=True)
+            return
+        # -----------------------------------------------------
+
         await interaction.response.defer(thinking=True)
 
         try:
@@ -118,7 +141,6 @@ class RefreshFileCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Gagal membaca file: {e}")
             return
-
         lines = [ln.strip() for ln in content.splitlines() if ln.strip()]
         if not lines:
             await interaction.followup.send("❌ File kosong / tidak ada token valid.")
