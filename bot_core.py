@@ -316,13 +316,23 @@ async def auto_allocate_po():
 # pastikan loop auto allocate start saat bot ready
 @bot.event
 async def on_ready():
+    # Sync global commands so commands without guild restriction are available to everyone.
     try:
-        guild_id = int(os.getenv("SERVER_ID"))
-        guild = discord.Object(id=guild_id)
-        await bot.tree.sync(guild=guild)
-        print(f"✅ Slash commands synced to guild {guild_id}")
+        global_synced = await bot.tree.sync()
+        print(f"[SYNC] Global slash commands: {len(global_synced)}")
     except Exception as e:
-        print(f"❌ Gagal sync command: {e}")
+        print(f"[SYNC] Gagal sync global command: {e}")
+
+    # Keep guild sync for commands that are explicitly guild-scoped.
+    try:
+        guild_id_raw = os.getenv("SERVER_ID", "").strip()
+        if guild_id_raw:
+            guild_id = int(guild_id_raw)
+            guild = discord.Object(id=guild_id)
+            guild_synced = await bot.tree.sync(guild=guild)
+            print(f"[SYNC] Guild {guild_id}: {len(guild_synced)} slash commands")
+    except Exception as e:
+        print(f"[SYNC] Gagal sync guild command: {e}")
 
     if not auto_allocate_po.is_running():
         auto_allocate_po.start()
