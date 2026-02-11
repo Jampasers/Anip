@@ -58,7 +58,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     @bot.hybrid_command(name="stock",
                         usage=f"{PREFIX}stock",
                         description="Show stock")
-    @is_allowed_user()  # hanya user di ALLOWED_USERNAMES
+    @is_allowed_user()  # hanya admin/ID yang diizinkan
     @is_maintenance()
     @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def stock(ctx):
