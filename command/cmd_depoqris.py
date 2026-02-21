@@ -19,8 +19,9 @@ PAKASIR_SLUG = os.getenv("PAKASIR_SLUG", "")
 PAKASIR_API_KEY = os.getenv("PAKASIR_API_KEY", "")
 PAKASIR_BASE_URL = "https://app.pakasir.com/api"
 
-# Pricing: 1 WL = 2.1 Rupiah (100 WL = 210 Rupiah)
-WL_TO_RUPIAH = 2.1
+# Pricing (dynamic): rate disimpan sebagai "harga 100 WL dalam Rupiah"
+DEFAULT_RATE_100_WL_RUPIAH = int(os.getenv("RATE_100_WL_RUPIAH", "210"))
+RATE_SETTINGS_ID = 1
 MIN_DEPOSIT_RUPIAH = 500
 
 # Log Channel
@@ -51,19 +52,56 @@ def ensure_qris_deposits_schema(cur, connection):
     """)
     connection.commit()
 
+def ensure_qris_rate_schema(cur, connection):
+    """Create qris_rate_settings table and ensure default row exists."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS qris_rate_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            rate_100_wl INTEGER NOT NULL
+        )
+    """)
+    cur.execute(
+        "INSERT OR IGNORE INTO qris_rate_settings (id, rate_100_wl) VALUES (?, ?)",
+        (RATE_SETTINGS_ID, max(1, DEFAULT_RATE_100_WL_RUPIAH))
+    )
+    connection.commit()
+
+def get_rate_100_wl() -> int:
+    """
+    Return current rate from DB as: 100 WL = Rp X.
+    Falls back to default if DB is unavailable.
+    """
+    fallback = max(1, DEFAULT_RATE_100_WL_RUPIAH)
+    if c is None:
+        return fallback
+
+    try:
+        c.execute("SELECT rate_100_wl FROM qris_rate_settings WHERE id = ?", (RATE_SETTINGS_ID,))
+        row = c.fetchone()
+        if row and row[0] is not None:
+            return max(1, int(row[0]))
+    except Exception as e:
+        print(f"[QRIS] Failed to load rate from DB: {e}")
+
+    return fallback
+
+def format_rate_100_wl(rate_100_wl: int | None = None) -> str:
+    """Format helper for displaying rate text in messages/logs."""
+    rate = int(rate_100_wl if rate_100_wl is not None else get_rate_100_wl())
+    if callable(fmt_wl):
+        return f"100 WL = Rp {fmt_wl(rate)}"
+    return f"100 WL = Rp {rate:,}".replace(",", ".")
+
 def mask_growid(growid: str) -> str:
     """Mask GrowID for privacy - show first letter + xxx. Example: 'PlayerName' -> 'Pxxx'"""
     if not growid or len(growid) < 1:
         return "xxx"
     return f"{growid[0].upper()}xxx"
 
-def convert_wl_to_rupiah(wl_amount: int) -> int:
-    """Convert WL to Rupiah (1 WL = 2.1 Rupiah)."""
-    return int(wl_amount * WL_TO_RUPIAH)
-
 def convert_rupiah_to_wl(rupiah_amount: int) -> int:
-    """Convert Rupiah to WL (1 WL = 2.1 Rupiah)."""
-    return int(rupiah_amount / WL_TO_RUPIAH)
+    """Convert Rupiah to WL using dynamic rate (100 WL = Rp X)."""
+    rate_100_wl = get_rate_100_wl()
+    return int((int(rupiah_amount) * 100) / rate_100_wl)
 
 def parse_iso_datetime(iso_string: str) -> datetime | None:
     """
@@ -227,7 +265,7 @@ async def monitor_pending_deposits():
                     # Notify user
                     try:
                         user = await bot.fetch_user(user_id)
-                        await user.send(f"⏰ Deposit QRIS `{order_id}` telah expired. Silakan buat deposit baru.")
+                        await user.send(f"Deposit QRIS `{order_id}` telah expired. Silakan buat deposit baru.")
                     except:
                         pass
                     continue
@@ -257,7 +295,7 @@ async def monitor_pending_deposits():
                     try:
                         user = await bot.fetch_user(user_id)
                         embed = discord.Embed(
-                            title="✅ Deposit QRIS Berhasil!",
+                            title="Deposit QRIS Berhasil",
                             color=discord.Color.green()
                         )
                         embed.add_field(name="Order ID", value=f"`{order_id}`", inline=False)
@@ -274,18 +312,18 @@ async def monitor_pending_deposits():
                             log_channel = bot.get_channel(CHANNEL_QRIS_SUCCESS_LOG)
                             if log_channel:
                                 log_embed = discord.Embed(
-                                    title="💰 Transaksi QRIS Berhasil",
+                                    title="Transaksi QRIS Berhasil",
                                     color=discord.Color.green(),
                                     timestamp=datetime.now()
                                 )
-                                log_embed.add_field(name="📋 Order ID", value=f"`{order_id}`", inline=False)
-                                log_embed.add_field(name="👤 User", value=f"<@{user_id}>", inline=True)
-                                log_embed.add_field(name="🎮 GrowID", value=mask_growid(growid), inline=True)
-                                log_embed.add_field(name="💵 Total Bayar", value=f"Rp {amount_rupiah:,}".replace(",", "."), inline=True)
-                                log_embed.add_field(name="💎 WL Diterima", value=f"{fmt_wl(amount_wl)} WL", inline=True)
+                                log_embed.add_field(name="Order ID", value=f"`{order_id}`", inline=False)
+                                log_embed.add_field(name="User", value=f"<@{user_id}>", inline=True)
+                                log_embed.add_field(name="GrowID", value=mask_growid(growid), inline=True)
+                                log_embed.add_field(name="Total Bayar", value=f"Rp {amount_rupiah:,}".replace(",", "."), inline=True)
+                                log_embed.add_field(name="WL Diterima", value=f"{fmt_wl(amount_wl)} WL", inline=True)
                                 log_embed.add_field(
-                                    name="📊 Konversi",
-                                    value=f"```Rp {amount_rupiah:,} → {fmt_wl(amount_wl)} WL\n(Rate: 100 WL = Rp 210)```".replace(",", "."),
+                                    name="Konversi",
+                                    value=f"```Rp {amount_rupiah:,} -> {fmt_wl(amount_wl)} WL\n(Rate: {format_rate_100_wl()})```".replace(",", "."),
                                     inline=False
                                 )
                                 log_embed.set_footer(text="QRIS Deposit System")
@@ -303,108 +341,16 @@ async def monitor_pending_deposits():
 # ============================================================
 async def process_qris_deposit(interaction: discord.Interaction, wl_amount: int) -> bool:
     """
-    Process QRIS deposit request.
-    Returns True if successful, False otherwise.
+    Legacy path (WL input) disabled.
+    Flow aktif sekarang: input Rupiah -> convert ke WL.
     """
-    user = interaction.user
-    user_id = user.id
-    
-    # Calculate rupiah amount
-    rupiah_amount = convert_wl_to_rupiah(wl_amount)
-    
-    # Validate minimum deposit
-    if rupiah_amount < MIN_DEPOSIT_RUPIAH:
-        min_wl = int(MIN_DEPOSIT_RUPIAH / WL_TO_RUPIAH) + 1
-        await interaction.followup.send(
-            f"❌ Minimal deposit Rp {MIN_DEPOSIT_RUPIAH}. Kamu perlu deposit minimal {min_wl} WL.",
-            ephemeral=True
-        )
-        return False
-    
-    # Check if user registered
-    c.execute("SELECT nama FROM users WHERE user_id = ?", (user_id,))
-    row = c.fetchone()
-    if not row:
-        await interaction.followup.send(
-            "❌ Kamu belum register. Klik **SET GROWID** dulu.",
-            ephemeral=True
-        )
-        return False
-    
-    growid = row[0]
-    
-    # Generate order ID
-    order_id = generate_order_id()
-    
-    # Create QRIS transaction via Pakasir
-    payment_data = await create_qris_transaction(order_id, rupiah_amount)
-    
-    if not payment_data:
-        await interaction.followup.send(
-            "❌ Gagal membuat transaksi QRIS. Coba lagi nanti.",
-            ephemeral=True
-        )
-        return False
-    
-    qr_string = payment_data.get("payment_number", "")
-    expired_at = payment_data.get("expired_at", "")
-    total_payment = payment_data.get("total_payment", rupiah_amount)
-    fee = payment_data.get("fee", 0)
-    
-    # Try to send DM first
-    try:
-        # Generate QR image
-        qr_image = generate_qr_image(qr_string)
-        
-        embed = discord.Embed(
-            title="💳 Invoice Deposit QRIS",
-            color=discord.Color.blue()
-        )
-        embed.add_field(name="Order ID", value=f"`{order_id}`", inline=False)
-        embed.add_field(name="GrowID", value=growid, inline=True)
-        embed.add_field(name="Jumlah WL", value=f"{fmt_wl(wl_amount)} WL", inline=True)
-        embed.add_field(name="Amount", value=f"Rp {rupiah_amount:,}".replace(",", "."), inline=True)
-        if fee > 0:
-            embed.add_field(name="Fee", value=f"Rp {fee:,}".replace(",", "."), inline=True)
-        embed.add_field(name="Total Bayar", value=f"**Rp {total_payment:,}**".replace(",", "."), inline=False)
-        embed.add_field(name="⏰ Expired", value=expired_at[:19].replace("T", " ") if expired_at else "-", inline=False)
-        embed.set_image(url="attachment://qris.png")
-        embed.set_footer(text="Scan QR code dengan aplikasi e-wallet/mobile banking")
-        
-        await user.send(embed=embed, file=discord.File(qr_image, filename="qris.png"))
-        
-    except discord.Forbidden:
-        # DM disabled - cancel deposit
-        await cancel_transaction(order_id, rupiah_amount)
-        await interaction.followup.send(
-            "❌ DM kamu tidak aktif. Deposit dibatalkan.\n"
-            "Aktifkan DM dari server ini lalu coba lagi.",
-            ephemeral=True
-        )
-        return False
-    except Exception as e:
-        print(f"[QRIS] DM Error: {e}")
-        await cancel_transaction(order_id, rupiah_amount)
-        await interaction.followup.send(
-            "❌ Gagal mengirim DM. Deposit dibatalkan.",
-            ephemeral=True
-        )
-        return False
-    
-    # Save to database
-    c.execute("""
-        INSERT INTO qris_deposits (order_id, user_id, amount_rupiah, amount_wl, status, qr_string, expired_at)
-        VALUES (?, ?, ?, ?, 'pending', ?, ?)
-    """, (order_id, user_id, rupiah_amount, wl_amount, qr_string, expired_at))
-    conn.commit()
-    
-    await interaction.followup.send(
-        "✅ Invoice QRIS sudah dikirim ke DM kamu!\n"
-        "Silakan scan QR code dan bayar sesuai nominal.",
-        ephemeral=True
-    )
-    
-    return True
+    _ = wl_amount
+    message = "Input deposit via WL tidak dipakai. Gunakan input Rupiah (akan otomatis convert ke WL)."
+    if interaction.response.is_done():
+        await interaction.followup.send(message, ephemeral=True)
+    else:
+        await interaction.response.send_message(message, ephemeral=True)
+    return False
 
 # ============================================================
 # Process Deposit Request (Rupiah Input)
@@ -421,7 +367,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
     # Validate minimum deposit
     if rupiah_amount < MIN_DEPOSIT_RUPIAH:
         await interaction.followup.send(
-            f"❌ Minimal deposit Rp {MIN_DEPOSIT_RUPIAH}.",
+            f"Minimal deposit Rp {MIN_DEPOSIT_RUPIAH}.",
             ephemeral=True
         )
         return False
@@ -434,7 +380,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
     row = c.fetchone()
     if not row:
         await interaction.followup.send(
-            "❌ Kamu belum register. Klik **SET GROWID** dulu.",
+            "Kamu belum register. Klik **SET GROWID** dulu.",
             ephemeral=True
         )
         return False
@@ -449,7 +395,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
     
     if not payment_data:
         await interaction.followup.send(
-            "❌ Gagal membuat transaksi QRIS. Coba lagi nanti.",
+            "Gagal membuat transaksi QRIS. Coba lagi nanti.",
             ephemeral=True
         )
         return False
@@ -465,7 +411,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
         qr_image = generate_qr_image(qr_string)
         
         embed = discord.Embed(
-            title="💳 Invoice Deposit QRIS",
+            title="Invoice Deposit QRIS",
             color=discord.Color.blue()
         )
         embed.add_field(name="Order ID", value=f"`{order_id}`", inline=False)
@@ -475,7 +421,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
         if fee > 0:
             embed.add_field(name="Fee", value=f"Rp {fee:,}".replace(",", "."), inline=True)
         embed.add_field(name="Total Bayar", value=f"**Rp {total_payment:,}**".replace(",", "."), inline=False)
-        embed.add_field(name="⏰ Expired", value=expired_at[:19].replace("T", " ") if expired_at else "-", inline=False)
+        embed.add_field(name="Expired", value=expired_at[:19].replace("T", " ") if expired_at else "-", inline=False)
         embed.set_image(url="attachment://qris.png")
         embed.set_footer(text="Scan QR code dengan aplikasi e-wallet/mobile banking")
         
@@ -485,7 +431,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
         # DM disabled - cancel deposit
         await cancel_transaction(order_id, rupiah_amount)
         await interaction.followup.send(
-            "❌ DM kamu tidak aktif. Deposit dibatalkan.\n"
+            "DM kamu tidak aktif. Deposit dibatalkan.\n"
             "Aktifkan DM dari server ini lalu coba lagi.",
             ephemeral=True
         )
@@ -494,7 +440,7 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
         print(f"[QRIS] DM Error: {e}")
         await cancel_transaction(order_id, rupiah_amount)
         await interaction.followup.send(
-            "❌ Gagal mengirim DM. Deposit dibatalkan.",
+            "Gagal mengirim DM. Deposit dibatalkan.",
             ephemeral=True
         )
         return False
@@ -507,8 +453,8 @@ async def process_qris_deposit_rupiah(interaction: discord.Interaction, rupiah_a
     conn.commit()
     
     await interaction.followup.send(
-        f"✅ Invoice QRIS sudah dikirim ke DM kamu!\n"
-        f"💰 Rp {rupiah_amount:,} → {fmt_wl(wl_amount)} WL".replace(",", "."),
+        f"Invoice QRIS sudah dikirim ke DM kamu.\n"
+        f"Rp {rupiah_amount:,} -> {fmt_wl(wl_amount)} WL".replace(",", "."),
         ephemeral=True
     )
     
@@ -527,6 +473,7 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
     
     # Ensure schema
     ensure_qris_deposits_schema(c, conn)
+    ensure_qris_rate_schema(c, conn)
     
     # Start monitor task when bot is ready
     @bot.listen('on_ready')
@@ -534,3 +481,4 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
         if not monitor_pending_deposits.is_running():
             monitor_pending_deposits.start()
             print("[QRIS] Deposit monitor started")
+

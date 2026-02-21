@@ -32,7 +32,6 @@ from surfercid.models import LTokenAccount
 SURFERCID_API_KEY = os.getenv("SURFERCID_API_KEY") or os.getenv("LTOKEN_API_KEY") or ""
 DB_PATH = os.getenv("DB_PATH", "discord_sqlite_bot.db")
 MAX_WORKERS = int(os.getenv("REFRESH_MAX_WORKERS", "5"))
-SERVER_ID = int(os.getenv("SERVER_ID", "0") or "0")
 
 # ================================================================
 # DATABASE UTILITIES
@@ -101,7 +100,6 @@ class RefreshFileCog(commands.Cog):
         name="refresh",
         description="Upload file .txt berisi token (1 token per baris) untuk di-refresh."
     )
-    @app_commands.guilds(discord.Object(id=SERVER_ID))
     @app_commands.default_permissions(send_messages=True)
     @app_commands.describe(file="File .txt berisi token")
     async def refresh(self, interaction: discord.Interaction, file: discord.Attachment):

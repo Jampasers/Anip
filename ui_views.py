@@ -590,7 +590,7 @@ class DepoQRISModal(Modal, title="Deposit QRIS"):
     """
     Modal untuk input jumlah Rupiah yang ingin di-deposit via QRIS.
     - Minimal deposit: Rp 500
-    - Rate: 1 WL = Rp 2.1
+    - Rate mengikuti setting terbaru command /rate
     """
 
     def __init__(self, author: discord.Member):
@@ -598,7 +598,7 @@ class DepoQRISModal(Modal, title="Deposit QRIS"):
         self.author = author
         self.rupiah_input = TextInput(
             label="Jumlah Rupiah (Min Rp 500)",
-            placeholder="Contoh: 500 (= 238 WL)",
+            placeholder="Contoh: 500",
             required=True,
             max_length=10,
         )
