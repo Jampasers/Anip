@@ -9,13 +9,16 @@ DB_NAME = "discord_sqlite_bot.db"
 conn = sqlite3.connect(DB_NAME, check_same_thread=False)
 c = conn.cursor()
 
-# Load from .env
-ALLOWED_ID = os.getenv("ALLOWED_ADMIN_IDS", "").split(",")
 ROLE_BUY = int(os.getenv("ROLE_BUY", "0"))
+
+
+def _is_server_admin(author) -> bool:
+    perms = getattr(author, "guild_permissions", None)
+    return bool(perms and perms.administrator)
 
 def is_allowed_user():
     def predicate(ctx):
-        return str(ctx.author.id) in [u for u in ALLOWED_ID]
+        return _is_server_admin(ctx.author)
     return commands.check(predicate)
 
 from discord import app_commands, Interaction
@@ -28,7 +31,7 @@ def is_buyer_ltoken():
 
 def is_maintenance():
     async def predicate(ctx):
-        if str(ctx.author.id) in [u for u in ALLOWED_ID]:
+        if _is_server_admin(ctx.author):
             return True
         
         c.execute("SELECT is_mt FROM maintenance LIMIT 1")

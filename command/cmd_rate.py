@@ -1,9 +1,9 @@
 from discord import app_commands
+
 import os
 
 DEFAULT_RATE_100_WL_RUPIAH = int(os.getenv("RATE_100_WL_RUPIAH", "210"))
 RATE_SETTINGS_ID = 1
-ALLOWED_ADMIN_IDS = {x.strip() for x in os.getenv("ALLOWED_ADMIN_IDS", "").split(",") if x.strip()}
 
 
 def ensure_qris_rate_schema(cur, connection):
@@ -39,9 +39,8 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
             getattr(ctx.author, "guild_permissions", None)
             and ctx.author.guild_permissions.administrator
         )
-        is_allowed_id = str(ctx.author.id) in ALLOWED_ADMIN_IDS
-        if not (has_admin_perm or is_allowed_id):
-            await ctx.send("Command ini khusus admin.")
+        if not has_admin_perm:
+            await ctx.send("Command ini khusus admin server.")
             return
 
         if rupiah <= 0:
