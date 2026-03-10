@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bot Monitor Realtime</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #171d23;
+      --line: #2d3946;
+      --text: #eef3f8;
+      --muted: #9aacbd;
+      --accent: #ff8c42;
+      --good: #79d98c;
+      --bad: #ff7c7c;
+      --warn: #ffd36e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #0d1116, #131922 58%, #0e1218);
+      color: var(--text);
+      font-family: Segoe UI, Arial, sans-serif;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      margin: 0 0 10px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #0c1015;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #16110c;
+      width: fit-content;
+    }
+
+    .secondary {
+      background: #2b3540;
+      color: var(--text);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+    }
+
+    th, td {
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: #11171d;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .ok {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .err {
+      color: var(--bad);
+      font-weight: 700;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .mini {
+      padding: 8px 12px;
+      font-size: 12px;
+      background: #2a333e;
+      color: var(--text);
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .danger {
+      background: #4b2323;
+      color: #ffd4d4;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 140, 66, 0.12);
+      border: 1px solid rgba(255, 140, 66, 0.3);
+      color: #ffd2b3;
+      font-size: 13px;
+    }
+
+    .badge.ok {
+      background: rgba(121, 217, 140, 0.14);
+      border-color: rgba(121, 217, 140, 0.35);
+      color: #b8f3c2;
+    }
+
+    .badge.err {
+      background: rgba(255, 124, 124, 0.14);
+      border-color: rgba(255, 124, 124, 0.35);
+      color: #ffc4c4;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      min-width: 240px;
+      max-width: 360px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #192129;
+      color: var(--text);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 9999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.ok {
+      border-color: rgba(121, 217, 140, 0.35);
+    }
+
+    .toast.err {
+      border-color: rgba(255, 124, 124, 0.35);
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0c1015;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      color: #d8f1dc;
+      min-height: 120px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="panel">
+      <h1>Bot Monitor Realtime</h1>
+      <p>Status bot dibaca otomatis per 2 detik. User bisa ganti server API sendiri dalam format <code>ip:port</code>.</p>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div class="badge" id="apiBadge">API Base: http://127.0.0.1:80</div>
+        <div class="badge" id="serverBadge">Server: belum dicek</div>
+        <div class="badge">Refresh: 2s</div>
+        <div class="badge" id="refreshBadge">Last Refresh: -</div>
+      </div>
+      <form id="apiForm" style="margin-top: 14px;">
+        <label>
+          API Server (ip:port)
+          <input id="apiHost" placeholder="0.0.0.0:80" value="0.0.0.0:80" required>
+        </label>
+        <button type="submit" class="secondary">Use Server</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Add / Connect Bot</h2>
+      <form id="addForm" class="grid">
+        <label>
+          Bot ID
+          <input id="addId" name="id" placeholder="BOTNAME" required>
+        </label>
+        <label>
+          Password
+          <input id="addPassword" name="password" type="password" placeholder="password">
+        </label>
+        <div>
+          <button type="submit">Add / Connect</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Status Table</h2>
+      <p style="margin-bottom: 14px;">Bot yang pernah di-add akan auto refresh di tabel ini. Aksi disconnect dan remove ada langsung di tiap baris.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Bot</th>
+              <th>Status</th>
+              <th>Online</th>
+              <th>World</th>
+              <th>Ping</th>
+              <th>Connect</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr>
+              <td colspan="8">Belum ada bot dimonitor.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Raw Response</h2>
+      <pre id="output">Ready.</pre>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="text/javascript">
+    var output = document.getElementById("output");
+    var tableBody = document.getElementById("tableBody");
+    var apiHost = document.getElementById("apiHost");
+    var apiBadge = document.getElementById("apiBadge");
+    var serverBadge = document.getElementById("serverBadge");
+    var refreshBadge = document.getElementById("refreshBadge");
+    var toast = document.getElementById("toast");
+    var apiForm = document.getElementById("apiForm");
+    var addForm = document.getElementById("addForm");
+
+    var apiBase = "http://127.0.0.1:80";
+    var apiInputValue = "0.0.0.0:80";
+    var watchedBots = [];
+    var stateByBot = {};
+    var rowByBot = {};
+    var toastTimer = 0;
+
+    function setNodeText(node, value) {
+      if (typeof node.textContent !== "undefined") {
+        node.textContent = value;
+      } else {
+        node.innerText = value;
+      }
+    }
+
+    function getNodeText(node) {
+      if (typeof node.textContent !== "undefined") {
+        return node.textContent;
+      }
+
+      return node.innerText || "";
+    }
+
+    function normalizeName(value) {
+      value = value || "";
+      return String(value).replace(/^\s+|\s+$/g, "");
+    }
+
+    function normalizeApiBase(value) {
+      value = normalizeName(value);
+      if (!value) {
+        return "http://127.0.0.1:80";
+      }
+
+      if (value.indexOf("http://") !== 0 && value.indexOf("https://") !== 0) {
+        value = "http://" + value;
+      }
+
+      if (value.indexOf("http://0.0.0.0") === 0) {
+        value = "http://127.0.0.1" + value.substring(14);
+      }
+
+      if (value.indexOf("https://0.0.0.0") === 0) {
+        value = "https://127.0.0.1" + value.substring(15);
+      }
+
+      while (value.length > 0 && value.charAt(value.length - 1) === "/") {
+        value = value.substring(0, value.length - 1);
+      }
+
+      return value;
+    }
+
+    function updateApiBase(value) {
+      apiInputValue = normalizeName(value) || "0.0.0.0:80";
+      apiBase = normalizeApiBase(apiInputValue);
+      apiHost.value = apiInputValue.replace("http://", "").replace("https://", "");
+      setNodeText(apiBadge, "API Base: " + apiBase);
+      localStorage.setItem("bot_api_base", apiBase);
+      localStorage.setItem("bot_api_base_input", apiHost.value);
+    }
+
+    function parseTextResponse(text) {
+      var data = {};
+      var lines = String(text || "").split(/\r?\n/);
+      var i = 0;
+      var index = -1;
+      var line = "";
+      var key = "";
+      var value = "";
+
+      for (i = 0; i < lines.length; i = i + 1) {
+        line = lines[i];
+        index = line.indexOf("=");
+        if (index === -1) {
+          continue;
+        }
+
+        key = line.substring(0, index).replace(/^\s+|\s+$/g, "");
+        value = line.substring(index + 1).replace(/^\s+|\s+$/g, "");
+        data[key] = value;
+      }
+
+      return data;
+    }
+
+    function showRaw(text) {
+      setNodeText(output, text);
+    }
+
+    function showToast(message, tone) {
+      toast.className = "toast " + (tone || "") + " show";
+      setNodeText(toast, message);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function() {
+        toast.className = "toast " + (tone || "");
+      }, 2400);
+    }
+
+    function setServerStatus(connected, message) {
+      serverBadge.className = connected ? "badge ok" : "badge err";
+      setNodeText(serverBadge, connected ? "Server: connected" : "Server: failed");
+      if (message) {
+        setNodeText(serverBadge, getNodeText(serverBadge) + " | " + message);
+      }
+    }
+
+    function setLastRefresh(value) {
+      setNodeText(refreshBadge, "Last Refresh: " + value);
+    }
+
+    function hasWatchedBot(name) {
+      var i = 0;
+      for (i = 0; i < watchedBots.length; i = i + 1) {
+        if (watchedBots[i] === name) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function saveWatchList() {
+      localStorage.setItem("watched_bots", JSON.stringify(watchedBots));
+    }
+
+    function addWatchedBot(name) {
+      name = normalizeName(name);
+      if (!name || hasWatchedBot(name)) {
+        return;
+      }
+
+      watchedBots.push(name);
+      saveWatchList();
+    }
+
+    function removeWatchedBot(name) {
+      var filtered = [];
+      var i = 0;
+
+      for (i = 0; i < watchedBots.length; i = i + 1) {
+        if (watchedBots[i] !== name) {
+          filtered.push(watchedBots[i]);
+        }
+      }
+
+      watchedBots = filtered;
+      delete stateByBot[name];
+
+      if (rowByBot[name] && rowByBot[name].parentNode) {
+        rowByBot[name].parentNode.removeChild(rowByBot[name]);
+      }
+
+      delete rowByBot[name];
+      saveWatchList();
+      renderEmptyState();
+    }
+
+    function statusClass(value) {
+      if (value === "true" || value === "connected" || value === "online") {
+        return "ok";
+      }
+
+      if (value === "false" || value === "failed" || value === "offline" || value === "error") {
+        return "err";
+      }
+
+      return "";
+    }
+
+    function getStatusLabel(data) {
+      var statusText = normalizeName(data.status_text || "");
+      var status = normalizeName(data.status || "");
+
+      if (statusText && /[a-z_]/i.test(statusText)) {
+        return statusText;
+      }
+
+      if (status && /[a-z_]/i.test(status)) {
+        return status;
+      }
+
+      if (normalizeName(data.online || "") === "true") {
+        return "online";
+      }
+
+      if (normalizeName(data.online || "") === "false") {
+        return "offline";
+      }
+
+      return "-";
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderEmptyState() {
+      var emptyRow = document.getElementById("emptyRow");
+
+      if (watchedBots.length > 0) {
+        if (emptyRow && emptyRow.parentNode) {
+          emptyRow.parentNode.removeChild(emptyRow);
+        }
+        return;
+      }
+
+      tableBody.innerHTML = '<tr id="emptyRow"><td colspan="8">Belum ada bot dimonitor.</td></tr>';
+    }
+
+    function ensureRow(name) {
+      var row = null;
+
+      if (!hasWatchedBot(name)) {
+        return null;
+      }
+
+      if (rowByBot[name]) {
+        return rowByBot[name];
+      }
+
+      renderEmptyState();
+      row = document.createElement("tr");
+      row.setAttribute("data-row-name", name);
+      rowByBot[name] = row;
+      tableBody.appendChild(row);
+      return row;
+    }
+
+    function updateRow(name) {
+      var data = stateByBot[name] || {};
+      var row = ensureRow(name);
+      var statusText = "";
+      var online = "";
+      var world = "";
+      var ping = "";
+      var connectResult = "";
+      var updated = "";
+
+      if (!row) {
+        return;
+      }
+
+      statusText = getStatusLabel(data);
+      online = data.online || "-";
+      world = data.world || "-";
+      ping = data.ping || "-";
+      connectResult = data.connect_result || "-";
+      updated = data.updated_at || "-";
+
+      row.innerHTML =
+        "<td>" + escapeHtml(data.name || name) + "</td>" +
+        '<td class="' + statusClass(statusText) + '">' + escapeHtml(statusText) + "</td>" +
+        '<td class="' + statusClass(online) + '">' + escapeHtml(online) + "</td>" +
+        "<td>" + escapeHtml(world) + "</td>" +
+        "<td>" + escapeHtml(ping) + "</td>" +
+        '<td class="' + statusClass(connectResult) + '">' + escapeHtml(connectResult) + "</td>" +
+        "<td>" + escapeHtml(updated) + "</td>" +
+        '<td>' +
+          '<button type="button" class="mini secondary" data-disconnect="' + escapeHtml(name) + '">Disconnect</button>' +
+          '<button type="button" class="mini danger" data-remove="' + escapeHtml(name) + '">Remove</button>' +
+        "</td>";
+    }
+
+    function encodeForm(data) {
+      var parts = [];
+      var key = "";
+
+      for (key in data) {
+        if (data.hasOwnProperty(key)) {
+          parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(data[key]));
+        }
+      }
+
+      return parts.join("&");
+    }
+
+    function requestText(url, method, body, silent, callback) {
+      var xhr = new XMLHttpRequest();
+
+      xhr.open(method || "GET", url, true);
+      if ((method || "GET") === "POST") {
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      }
+
+      xhr.onreadystatechange = function() {
+        var text = "";
+        var data = null;
+
+        if (xhr.readyState !== 4) {
+          return;
+        }
+
+        text = xhr.responseText || "";
+        data = parseTextResponse(text);
+
+        if (!silent) {
+          showRaw(text);
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          callback(null, data, text);
+          return;
+        }
+
+        callback(new Error(data.message || text || "Request gagal."), data, text);
+      };
+
+      xhr.onerror = function() {
+        if (!silent) {
+          showRaw("ok=false\nmessage=Request gagal.");
+        }
+        callback(new Error("Request gagal."), null, "");
+      };
+
+      xhr.send(body || null);
+    }
+
+    function pingServer(showPopup, done) {
+      requestText(apiBase + "/", "GET", null, true, function(error, data) {
+        var message = "";
+
+        if (error) {
+          setServerStatus(false, apiHost.value);
+          showRaw("ok=false\nmessage=" + error.message);
+          if (showPopup) {
+            showToast("Gagal konek ke server", "err");
+          }
+          if (done) {
+            done(false);
+          }
+          return;
+        }
+
+        message = (data && data.message) || "Server connected.";
+        setServerStatus(true, apiHost.value);
+        showRaw("ok=true\nmessage=" + message + "\nbase=" + apiBase);
+        if (showPopup) {
+          showToast("Berhasil konek ke server", "ok");
+        }
+        if (done) {
+          done(true);
+        }
+      });
+    }
+
+    function refreshBot(name, done) {
+      requestText(apiBase + "/bot/get?name=" + encodeURIComponent(name), "GET", null, true, function(error, data) {
+        if (error) {
+          done(error);
+          return;
+        }
+
+        if (!hasWatchedBot(name)) {
+          done(null);
+          return;
+        }
+
+        data.updated_at = new Date().toLocaleTimeString();
+        stateByBot[name] = data;
+        updateRow(name);
+        done(null);
+      });
+    }
+
+    function refreshAllBots() {
+      var pending = 0;
+      var i = 0;
+      var name = "";
+
+      if (watchedBots.length === 0) {
+        renderEmptyState();
+        setLastRefresh("-");
+        return;
+      }
+
+      pending = watchedBots.length;
+      for (i = 0; i < watchedBots.length; i = i + 1) {
+        (function(currentName) {
+          refreshBot(currentName, function(error) {
+            if (error) {
+              stateByBot[currentName] = {
+                name: currentName,
+                status_text: "error",
+                online: "false",
+                world: "-",
+                ping: "-",
+                connect_result: "failed",
+                updated_at: new Date().toLocaleTimeString(),
+                message: error.message
+              };
+              updateRow(currentName);
+            }
+
+            pending = pending - 1;
+            if (pending <= 0) {
+              setLastRefresh(new Date().toLocaleTimeString());
+            }
+          });
+        }(watchedBots[i]));
+      }
+    }
+
+    function cloneData(data) {
+      var copy = {};
+      var key = "";
+
+      for (key in data) {
+        if (data.hasOwnProperty(key)) {
+          copy[key] = data[key];
+        }
+      }
+
+      return copy;
+    }
+
+    function findActionButton(element, attributeName) {
+      while (element && element !== tableBody) {
+        if (element.getAttribute && element.getAttribute(attributeName)) {
+          return element;
+        }
+        element = element.parentNode;
+      }
+
+      return null;
+    }
+
+    apiForm.onsubmit = function(event) {
+      if (event && event.preventDefault) {
+        event.preventDefault();
+      }
+
+      updateApiBase(apiHost.value);
+      pingServer(true, function(connected) {
+        if (connected) {
+          refreshAllBots();
+        }
+      });
+      return false;
+    };
+
+    addForm.onsubmit = function(event) {
+      var id = normalizeName(document.getElementById("addId").value);
+      var password = normalizeName(document.getElementById("addPassword").value);
+
+      if (event && event.preventDefault) {
+        event.preventDefault();
+      }
+
+      requestText(apiBase + "/bot/add", "POST", encodeForm({
+        id: id,
+        password: password
+      }), false, function(error, data) {
+        var name = "";
+        var itemData = null;
+
+        if (error) {
+          showRaw("ok=false\nmessage=" + error.message);
+          showToast("Gagal add bot", "err");
+          return;
+        }
+
+        name = data.name || id;
+        addWatchedBot(name);
+        itemData = cloneData(data);
+        itemData.updated_at = new Date().toLocaleTimeString();
+        stateByBot[name] = itemData;
+        updateRow(name);
+
+        if (data.listed_in_lucifer === "true" && data.connect_result === "connected") {
+          showToast("Bot berhasil ditambah dan connect", "ok");
+        } else if (data.listed_in_lucifer === "true") {
+          showToast("Bot berhasil ditambah, connect belum sukses", "err");
+        } else {
+          showToast("Bot belum muncul di list Lucifer", "err");
+        }
+      });
+
+      return false;
+    };
+
+    tableBody.onclick = function(event) {
+      var evt = event || window.event;
+      var target = evt.target || evt.srcElement;
+      var disconnectButton = findActionButton(target, "data-disconnect");
+      var removeButton = findActionButton(target, "data-remove");
+      var name = "";
+
+      if (!disconnectButton && !removeButton) {
+        return;
+      }
+
+      if (disconnectButton) {
+        name = normalizeName(disconnectButton.getAttribute("data-disconnect"));
+        requestText(apiBase + "/bot/disconnect", "POST", encodeForm({ name: name }), false, function(error) {
+          if (error) {
+            showRaw("ok=false\nmessage=" + error.message);
+            return;
+          }
+
+          stateByBot[name] = cloneData(stateByBot[name] || {});
+          stateByBot[name].name = name;
+          stateByBot[name].online = "false";
+          stateByBot[name].connect_result = "disconnected";
+          stateByBot[name].updated_at = new Date().toLocaleTimeString();
+          updateRow(name);
+          refreshBot(name, function() {});
+        });
+        return;
+      }
+
+      name = normalizeName(removeButton.getAttribute("data-remove"));
+      requestText(apiBase + "/bot/remove", "POST", encodeForm({ name: name }), false, function(error) {
+        if (error) {
+          showRaw("ok=false\nmessage=" + error.message);
+          return;
+        }
+
+        removeWatchedBot(name);
+      });
+    };
+
+    updateApiBase(localStorage.getItem("bot_api_base_input") || apiHost.value);
+    try {
+      watchedBots = JSON.parse(localStorage.getItem("watched_bots") || "[]");
+      if (!watchedBots || typeof watchedBots.length === "undefined") {
+        watchedBots = [];
+      }
+    } catch (error) {
+      watchedBots = [];
+    }
+
+    for (var i = 0; i < watchedBots.length; i = i + 1) {
+      ensureRow(watchedBots[i]);
+    }
+
+    renderEmptyState();
+    setLastRefresh("-");
+    pingServer(false, function() {});
+    refreshAllBots();
+    setInterval(refreshAllBots, 2000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deposit Monitor 2</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #171d23;
+      --line: #2d3946;
+      --text: #eef3f8;
+      --muted: #9aacbd;
+      --accent: #ff8c42;
+      --good: #79d98c;
+      --bad: #ff7c7c;
+      --warn: #ffd36e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #0d1116, #131922 58%, #0e1218);
+      color: var(--text);
+      font-family: Segoe UI, Arial, sans-serif;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+    }
+
+    h1,
+    h2 {
+      margin: 0 0 10px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #0c1015;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #16110c;
+      width: fit-content;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .secondary {
+      background: #2b3540;
+      color: var(--text);
+    }
+
+    .danger {
+      background: #4b2323;
+      color: #ffd4d4;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 140, 66, 0.12);
+      border: 1px solid rgba(255, 140, 66, 0.3);
+      color: #ffd2b3;
+      font-size: 13px;
+    }
+
+    .badge.ok {
+      background: rgba(121, 217, 140, 0.14);
+      border-color: rgba(121, 217, 140, 0.35);
+      color: #b8f3c2;
+    }
+
+    .badge.err {
+      background: rgba(255, 124, 124, 0.14);
+      border-color: rgba(255, 124, 124, 0.35);
+      color: #ffc4c4;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 700px;
+    }
+
+    th,
+    td {
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: #11171d;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .ok {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .err {
+      color: var(--bad);
+      font-weight: 700;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0c1015;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      color: #d8f1dc;
+      min-height: 120px;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      min-width: 240px;
+      max-width: 360px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #192129;
+      color: var(--text);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 9999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.ok {
+      border-color: rgba(121, 217, 140, 0.35);
+    }
+
+    .toast.err {
+      border-color: rgba(255, 124, 124, 0.35);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <section class="panel">
+      <h1>Deposit Monitor 2</h1>
+      <p>Flow: add bot → connect → tunggu 8 detik → jalankan script donate → auto remove 120 detik.</p>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div class="badge" id="apiBadge">API Base: http://127.0.0.1:80</div>
+        <div class="badge" id="serverBadge">Server: belum dicek</div>
+      </div>
+      <form id="apiForm" style="margin-top: 14px;">
+        <label>
+          API Server (ip:port)
+          <input id="apiHost" placeholder="0.0.0.0:80" value="0.0.0.0:80" required>
+        </label>
+        <button type="submit" class="secondary">Use Server</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Deposit Action</h2>
+      <div class="grid">
+        <div class="panel">
+          <p>Bot tetap: <strong>btr002</strong></p>
+          <p>Password tetap: <strong>kocak@2024</strong></p>
+          <p>Auto remove: <strong>120 detik</strong></p>
+          <p>Script delay: <strong>8 detik setelah online</strong></p>
+        </div>
+        <div class="panel">
+          <div class="btn-row">
+            <form id="depositForm">
+              <button type="submit" id="depositBtn">Deposit</button>
+            </form>
+            <form id="removeForm">
+              <button type="submit" id="removeBtn" class="danger">Remove Bot</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="resultPanel">
+      <h2>Last Result</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Bot</th>
+              <th>Status</th>
+              <th>Online</th>
+              <th>World</th>
+              <th>Ping</th>
+              <th>Connect</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Raw Response</h2>
+      <pre id="output">Ready.</pre>
+    </section>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script type="text/javascript">
+    var output = document.getElementById("output");
+    var apiHost = document.getElementById("apiHost");
+    var apiBadge = document.getElementById("apiBadge");
+    var serverBadge = document.getElementById("serverBadge");
+    var tableBody = document.getElementById("tableBody");
+    var resultPanel = document.getElementById("resultPanel");
+    var toast = document.getElementById("toast");
+    var apiForm = document.getElementById("apiForm");
+    var depositForm = document.getElementById("depositForm");
+    var removeForm = document.getElementById("removeForm");
+    var depositBtn = document.getElementById("depositBtn");
+    var removeBtn = document.getElementById("removeBtn");
+
+    var apiBase = "http://127.0.0.1:80";
+    var toastTimer = 0;
+    var isDepositing = false;
+
+    function setNodeText(node, value) {
+      if (typeof node.textContent !== "undefined") {
+        node.textContent = value;
+      } else {
+        node.innerText = value;
+      }
+    }
+
+    function normalizeText(value) {
+      value = value || "";
+      return String(value).replace(/^\s+|\s+$/g, "");
+    }
+
+    function normalizeApiBase(value) {
+      value = normalizeText(value);
+      if (!value) {
+        return "http://127.0.0.1:80";
+      }
+
+      if (value.indexOf("http://") !== 0 && value.indexOf("https://") !== 0) {
+        value = "http://" + value;
+      }
+
+      if (value.indexOf("http://0.0.0.0") === 0) {
+        value = "http://127.0.0.1" + value.substring(14);
+      }
+
+      if (value.indexOf("https://0.0.0.0") === 0) {
+        value = "https://127.0.0.1" + value.substring(15);
+      }
+
+      while (value.length > 0 && value.charAt(value.length - 1) === "/") {
+        value = value.substring(0, value.length - 1);
+      }
+
+      return value;
+    }
+
+    function updateApiBase(value) {
+      value = normalizeText(value) || "0.0.0.0:80";
+      apiBase = normalizeApiBase(value);
+      apiHost.value = value.replace("http://", "").replace("https://", "");
+      setNodeText(apiBadge, "API Base: " + apiBase);
+      localStorage.setItem("deposit2_api_input", apiHost.value);
+    }
+
+    function parseTextResponse(text) {
+      var data = {};
+      var lines = String(text || "").split(/\r?\n/);
+      var i = 0;
+      var line = "";
+      var index = -1;
+      var key = "";
+      var value = "";
+
+      for (i = 0; i < lines.length; i = i + 1) {
+        line = lines[i];
+        index = line.indexOf("=");
+        if (index === -1) {
+          continue;
+        }
+
+        key = line.substring(0, index).replace(/^\s+|\s+$/g, "");
+        value = line.substring(index + 1).replace(/^\s+|\s+$/g, "");
+        data[key] = value;
+      }
+
+      return data;
+    }
+
+    function showRaw(text) {
+      setNodeText(output, text);
+    }
+
+    function showToast(message, tone) {
+      toast.className = "toast " + (tone || "") + " show";
+      setNodeText(toast, message);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toast.className = "toast " + (tone || "");
+      }, 3000);
+    }
+
+    function setServerStatus(connected, message) {
+      serverBadge.className = connected ? "badge ok" : "badge err";
+      setNodeText(serverBadge, connected ? "Server: connected" : "Server: failed");
+      if (message) {
+        setNodeText(serverBadge, serverBadge.textContent + " | " + message);
+      }
+    }
+
+    function statusClass(value) {
+      if (value === "true" || value === "connected" || value === "online") {
+        return "ok";
+      }
+
+      if (value === "false" || value === "failed" || value === "offline") {
+        return "err";
+      }
+
+      return "";
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function getStatusLabel(data) {
+      var statusText = normalizeText(data.status_text || "");
+      var status = normalizeText(data.status || "");
+
+      if (statusText && /[a-z_]/i.test(statusText)) {
+        return statusText;
+      }
+
+      if (status && /[a-z_]/i.test(status)) {
+        return status;
+      }
+
+      if (normalizeText(data.online || "") === "true") {
+        return "online";
+      }
+
+      if (normalizeText(data.online || "") === "false") {
+        return "offline";
+      }
+
+      return "-";
+    }
+
+    function renderResult(data) {
+      var botName = data.name || "btr002";
+      var statusText = getStatusLabel(data);
+      var online = data.online || "false";
+      var world = data.world || "-";
+      var ping = data.ping || "0";
+      var connectResult = data.connect_result || "-";
+      var message = data.message || "-";
+
+      resultPanel.className = "panel";
+
+      tableBody.innerHTML =
+        "<tr>" +
+        "<td>" + escapeHtml(botName) + "</td>" +
+        '<td class="' + statusClass(statusText) + '">' + escapeHtml(statusText) + "</td>" +
+        '<td class="' + statusClass(online) + '">' + escapeHtml(online) + "</td>" +
+        "<td>" + escapeHtml(world) + "</td>" +
+        "<td>" + escapeHtml(ping) + "</td>" +
+        '<td class="' + statusClass(connectResult) + '">' + escapeHtml(connectResult) + "</td>" +
+        "<td>" + escapeHtml(message) + "</td>" +
+        "</tr>";
+    }
+
+    function requestText(url, method, body, callback) {
+      var xhr = new XMLHttpRequest();
+
+      xhr.open(method || "GET", url, true);
+      if ((method || "GET") === "POST") {
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      }
+
+      xhr.onreadystatechange = function () {
+        var text = "";
+        var data = null;
+
+        if (xhr.readyState !== 4) {
+          return;
+        }
+
+        text = xhr.responseText || "";
+        data = parseTextResponse(text);
+        showRaw(text);
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          callback(null, data);
+          return;
+        }
+
+        callback(new Error(data.message || text || "Request gagal."), data);
+      };
+
+      xhr.onerror = function () {
+        showRaw("ok=false\nmessage=Request gagal.");
+        callback(new Error("Request gagal."), null);
+      };
+
+      xhr.send(body || null);
+    }
+
+    function setDepositStatus(text) {
+      depositBtn.disabled = true;
+      setNodeText(depositBtn, text);
+    }
+
+    function resetDeposit() {
+      isDepositing = false;
+      depositBtn.disabled = false;
+      setNodeText(depositBtn, "Deposit");
+    }
+
+    function startScript() {
+      setDepositStatus("Starting script...");
+      requestText(apiBase + "/bot/script", "POST", "", function (error, data) {
+        resetDeposit();
+
+        if (error) {
+          showToast("Script gagal: " + (data && data.message ? data.message : error.message), "err");
+          return;
+        }
+
+        showToast("Script donation started!", "ok");
+      });
+    }
+
+    apiForm.onsubmit = function (event) {
+      if (event && event.preventDefault) {
+        event.preventDefault();
+      }
+
+      updateApiBase(apiHost.value);
+      requestText(apiBase + "/", "GET", null, function (error, data) {
+        if (error) {
+          setServerStatus(false, apiHost.value);
+          showToast("Gagal konek ke server", "err");
+          return;
+        }
+
+        setServerStatus(true, apiHost.value);
+        showToast("Berhasil konek ke server", "ok");
+      });
+      return false;
+    };
+
+    depositForm.onsubmit = function (event) {
+      if (event && event.preventDefault) {
+        event.preventDefault();
+      }
+
+      if (isDepositing) {
+        return false;
+      }
+
+      isDepositing = true;
+      setDepositStatus("Connecting bot...");
+
+      requestText(apiBase + "/bot/add", "POST", "", function (error, data) {
+        if (data) {
+          renderResult(data);
+        }
+
+        if (error) {
+          resetDeposit();
+          showToast("Add bot gagal: " + (data && data.message ? data.message : error.message), "err");
+          return;
+        }
+
+        if (data && data.online === "true") {
+          showToast("Bot online! Menunggu 8 detik...", "ok");
+          setDepositStatus("Tunggu 8 detik...");
+          setTimeout(function () {
+            startScript();
+          }, 8000);
+        } else {
+          resetDeposit();
+          showToast("Bot gagal connect", "err");
+        }
+      });
+      return false;
+    };
+
+    removeForm.onsubmit = function (event) {
+      if (event && event.preventDefault) {
+        event.preventDefault();
+      }
+
+      removeBtn.disabled = true;
+      setNodeText(removeBtn, "Removing...");
+      requestText(apiBase + "/bot/remove", "POST", "", function (error, data) {
+        removeBtn.disabled = false;
+        setNodeText(removeBtn, "Remove Bot");
+
+        if (error) {
+          showToast("Gagal remove bot: " + (data && data.message ? data.message : error.message), "err");
+          return;
+        }
+
+        showToast("Bot berhasil di-remove", "ok");
+      });
+      return false;
+    };
+
+    updateApiBase(localStorage.getItem("deposit2_api_input") || apiHost.value);
+  </script>
+</body>
+
+</html>

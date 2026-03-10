@@ -18,6 +18,7 @@ import asyncio
 import discord
 import os
 import io
+import aiohttp
 from discord.ui import View, Button, Modal, TextInput, Select
 import time
 from dotenv import load_dotenv
@@ -39,6 +40,10 @@ last_click = {}  # simpan user cooldown {user_id: timestamp}
 processing_locks = set() # simpan user yang sedang diproses {user_id}
 COOLDOWN_SECONDS = 10
 BUY_LOCK = asyncio.Lock()  # Global lock for purchasing
+
+# === TAMBAHAN DEPOSIT ===
+DEPOSIT_COOLDOWNS = {}
+is_deposit_active = False
 
 
 # ===== Helpers umum =====
@@ -82,6 +87,84 @@ async def send_ephemeral_countdown(
         )
     except Exception:
         pass
+
+async def run_deposit_session(interaction: discord.Interaction):
+    global is_deposit_active
+    
+    msg = None
+    try:
+        msg = await interaction.original_response()
+    except Exception:
+        pass
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            # 1. Add bot
+            async with session.post("http://127.0.0.1:80/bot/add") as resp:
+                pass
+            
+            # 2. Run script
+            async with session.post("http://127.0.0.1:80/bot/script") as resp:
+                pass
+            
+            # Loop for 3 mins
+            start_time = time.time()
+            max_duration = 24
+            
+            while True:
+                now = time.time()
+                elapsed = now - start_time
+                if elapsed > max_duration:
+                    break
+                    
+                sisa_waktu = int(max_duration - elapsed)
+                m, s = divmod(sisa_waktu, 60)
+                timer_str = f"{m:02d}:{s:02d}"
+                
+                # Check status
+                bot_status_str = "Checking..."
+                try:
+                    async with session.get("http://127.0.0.1:80/bot/status", timeout=5) as st_resp:
+                        if st_resp.status == 200:
+                            st_text = await st_resp.text()
+                            if "\nstatus=" in st_text:
+                                bot_status_str = st_text.split("\nstatus=")[1].split("\n")[0].upper()
+                except Exception:
+                    bot_status_str = "ERROR/OFFLINE"
+                    
+                embed = discord.Embed(title="💳 **Deposit WL**", color=discord.Color.blue())
+                embed.add_field(name="🌍 **World**", value="# HANIFKUCAK", inline=False)
+                embed.add_field(name="🤖 **Name Bot**", value="# btr002", inline=False)
+                embed.add_field(name="🔌 **Bot Status**", value=f"# {bot_status_str}", inline=False)
+                embed.add_field(name="⏱️ **Sisa Waktu**", value=f"# {timer_str}", inline=False)
+                
+                if msg:
+                    try:
+                        await msg.edit(content="Deposit Session Aktif", embed=embed)
+                    except Exception:
+                        pass
+                
+                await asyncio.sleep(3)
+                
+        except Exception as e:
+            print(f"[DEPOSIT ERROR]: {e}")
+        finally:
+            try:
+                async with session.post("http://127.0.0.1:80/bot/remove") as resp:
+                    pass
+            except Exception:
+                pass
+            
+            if msg:
+                try:
+                    embed = discord.Embed(title="💳 **Deposit Expired**", color=discord.Color.red())
+                    embed.description = "# Waktu Habis!\nSilakan pencet deposit lagi jika ingin deposit."
+                    await msg.edit(content="Expired", embed=embed)
+                except Exception:
+                    pass
+            
+            is_deposit_active = False
+
 
 
 # ===== Schema helpers =====
@@ -904,10 +987,32 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
 
             # Deposit info
             if cid == "deposit":
-                emb = discord.Embed(title="💳 **Deposit Info**", color=discord.Color.gold())
-                emb.add_field(name="🌍 **World**", value="`MODALMEKI`")
-                emb.add_field(name="🤖 **Name Bot**", value="`everyone`")
-                await send_ephemeral_countdown(interaction, "**ℹ️ Deposit Info**", embed=emb)
+                global is_deposit_active
+                
+                now_dep = time.time()
+                last_dep = DEPOSIT_COOLDOWNS.get(user.id, 0)
+                if now_dep - last_dep < 40:
+                    sisa = int(40 - (now_dep - last_dep))
+                    await interaction.response.send_message(
+                        f"❌ Tunggu {sisa} detik lagi sebelum mencoba deposit.",
+                        ephemeral=True
+                    )
+                    return
+                # Update cooldown
+                DEPOSIT_COOLDOWNS[user.id] = now_dep
+                
+                if is_deposit_active:
+                    await interaction.response.send_message(
+                        "Sedang Dalam Antrian Coba lagi nanti",
+                        ephemeral=True
+                    )
+                    return
+                
+                is_deposit_active = True
+                await interaction.response.send_message("⏳ Sedang menghubungkan bot deposit...", ephemeral=True)
+                
+                # Start task in background
+                bot.loop.create_task(run_deposit_session(interaction))
                 return
 
             # Depo QRIS (baru)
