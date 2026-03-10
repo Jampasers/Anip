@@ -99,17 +99,85 @@ async def run_deposit_session(interaction: discord.Interaction):
     
     async with aiohttp.ClientSession() as session:
         try:
-            # 1. Add bot
-            async with session.post("http://127.0.0.1:80/bot/add") as resp:
-                pass
+            # =============================================
+            # PHASE 1: Add bot + wait for real online + warp
+            # =============================================
+            if msg:
+                try:
+                    embed_wait = discord.Embed(
+                        title="⏳ **Connecting Bot...**",
+                        description="Waiting for bot to come online...\nPlease wait up to 1 minute.",
+                        color=discord.Color.orange()
+                    )
+                    await msg.edit(content="", embed=embed_wait)
+                except Exception:
+                    pass
             
-            # 2. Run script
-            async with session.post("http://127.0.0.1:80/bot/script") as resp:
-                pass
+            add_ok = False
+            add_msg = "Unknown error"
             
-            # Loop for 3 mins
+            try:
+                timeout_obj = aiohttp.ClientTimeout(total=70)  # 70s timeout (60s server + 10s buffer)
+                async with session.post("http://127.0.0.1:80/bot/add", timeout=timeout_obj) as resp:
+                    resp_text = await resp.text()
+                    print(f"[DEPOSIT] /bot/add response: {resp_text}")
+                    
+                    if resp.status == 200 and "ok=true" in resp_text:
+                        add_ok = True
+                        add_msg = "Bot is online and in world."
+                    else:
+                        # Parse error message from server
+                        for line in resp_text.split("\n"):
+                            if line.startswith("message="):
+                                add_msg = line.split("message=", 1)[1]
+                                break
+            except asyncio.TimeoutError:
+                add_msg = "Timeout waiting for bot to come online (over 70 seconds)."
+            except Exception as e:
+                add_msg = f"Error: {e}"
+            
+            # If addbot failed (timeout / bot didn't come online)
+            if not add_ok:
+                print(f"[DEPOSIT] Add bot FAILED: {add_msg}")
+                
+                # Try to remove bot for cleanup
+                try:
+                    async with session.post("http://127.0.0.1:80/bot/remove") as resp:
+                        pass
+                except Exception:
+                    pass
+                
+                if msg:
+                    try:
+                        embed_fail = discord.Embed(
+                            title="❌ **Deposit Failed**",
+                            description=f"Bot failed to come online.\n**Reason:** {add_msg}\n\nPlease try again later.",
+                            color=discord.Color.red()
+                        )
+                        await msg.edit(content="", embed=embed_fail)
+                    except Exception:
+                        pass
+                
+                is_deposit_active = False
+                return
+            
+            # =============================================
+            # PHASE 2: Bot is online + in world HANIFKUCAK
+            # Run donation script
+            # =============================================
+            try:
+                async with session.post("http://127.0.0.1:80/bot/script") as resp:
+                    script_text = await resp.text()
+                    print(f"[DEPOSIT] /bot/script response: {script_text}")
+            except Exception as e:
+                print(f"[DEPOSIT] Script error (non-fatal): {e}")
+            
+            # =============================================
+            # PHASE 3: Deposit session active — show embed
+            # Only shown when bot is confirmed online
+            # =============================================
             start_time = time.time()
-            max_duration = 24
+            max_duration = 120  # 2 min session
             
             while True:
                 now = time.time()
@@ -117,11 +185,11 @@ async def run_deposit_session(interaction: discord.Interaction):
                 if elapsed > max_duration:
                     break
                     
-                sisa_waktu = int(max_duration - elapsed)
-                m, s = divmod(sisa_waktu, 60)
+                remaining = int(max_duration - elapsed)
+                m, s = divmod(remaining, 60)
                 timer_str = f"{m:02d}:{s:02d}"
                 
-                # Check status
+                # Check status from server
                 bot_status_str = "Checking..."
                 try:
                     async with session.get("http://127.0.0.1:80/bot/status", timeout=5) as st_resp:
@@ -131,16 +199,17 @@ async def run_deposit_session(interaction: discord.Interaction):
                                 bot_status_str = st_text.split("\nstatus=")[1].split("\n")[0].upper()
                 except Exception:
                     bot_status_str = "ERROR/OFFLINE"
-                    
+                
+                # Show deposit embed
                 embed = discord.Embed(title="💳 **Deposit WL**", color=discord.Color.blue())
-                embed.add_field(name="🌍 **World**", value="# HANIFKUCAK", inline=False)
-                embed.add_field(name="🤖 **Name Bot**", value="# btr002", inline=False)
-                embed.add_field(name="🔌 **Bot Status**", value=f"# {bot_status_str}", inline=False)
-                embed.add_field(name="⏱️ **Sisa Waktu**", value=f"# {timer_str}", inline=False)
+                embed.add_field(name="🌍 **World**", value="HANIFKUCAK", inline=False)
+                embed.add_field(name="🤖 **Name Bot**", value="btr002", inline=False)
+                embed.add_field(name="🔌 **Bot Status**", value=f"{bot_status_str}", inline=False)
+                embed.add_field(name="⏱️ **Time Left**", value=f"{timer_str}", inline=False)
                 
                 if msg:
                     try:
-                        await msg.edit(content="Deposit Session Aktif", embed=embed)
+                        await msg.edit(content="", embed=embed)
                     except Exception:
                         pass
                 
@@ -149,6 +218,7 @@ async def run_deposit_session(interaction: discord.Interaction):
         except Exception as e:
             print(f"[DEPOSIT ERROR]: {e}")
         finally:
+            # Cleanup: remove bot + stop script
             try:
                 async with session.post("http://127.0.0.1:80/bot/remove") as resp:
                     pass
@@ -158,8 +228,8 @@ async def run_deposit_session(interaction: discord.Interaction):
             if msg:
                 try:
                     embed = discord.Embed(title="💳 **Deposit Expired**", color=discord.Color.red())
-                    embed.description = "# Waktu Habis!\nSilakan pencet deposit lagi jika ingin deposit."
-                    await msg.edit(content="Expired", embed=embed)
+                    embed.description = "# Time's Up!\nPress the deposit button again if you want to deposit."
+                    await msg.edit(content="", embed=embed)
                 except Exception:
                     pass
             
@@ -992,9 +1062,9 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                 now_dep = time.time()
                 last_dep = DEPOSIT_COOLDOWNS.get(user.id, 0)
                 if now_dep - last_dep < 40:
-                    sisa = int(40 - (now_dep - last_dep))
+                    remaining = int(40 - (now_dep - last_dep))
                     await interaction.response.send_message(
-                        f"❌ Tunggu {sisa} detik lagi sebelum mencoba deposit.",
+                        f"❌ Please wait {remaining} seconds before trying to deposit again.",
                         ephemeral=True
                     )
                     return
@@ -1003,13 +1073,13 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                 
                 if is_deposit_active:
                     await interaction.response.send_message(
-                        "Sedang Dalam Antrian Coba lagi nanti",
+                        "⏳ Another deposit session is active. Please try again later.",
                         ephemeral=True
                     )
                     return
                 
                 is_deposit_active = True
-                await interaction.response.send_message("⏳ Sedang menghubungkan bot deposit...", ephemeral=True)
+                await interaction.response.send_message("⏳ Connecting deposit bot...", ephemeral=True)
                 
                 # Start task in background
                 bot.loop.create_task(run_deposit_session(interaction))
