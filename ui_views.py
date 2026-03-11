@@ -120,7 +120,7 @@ async def run_deposit_session(interaction: discord.Interaction):
             for retry in range(2):
                 try:
                     mac_val, rid_val, wk_val, ltoken_val = "", "", "", ""
-                    output_path = r"c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server\output.txt"
+                    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "glog server", "output.txt")
                     if os.path.exists(output_path):
                         with open(output_path, "r", encoding="utf-8") as f:
                             lines = [line.strip() for line in f if line.strip()]
@@ -195,7 +195,7 @@ async def run_deposit_session(interaction: discord.Interaction):
                             try:
                                 proc = await asyncio.create_subprocess_exec(
                                     'python', 'getToken.py',
-                                    cwd=r'c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server'
+                                    cwd=os.path.join(os.path.dirname(os.path.abspath(__file__)), "glog server")
                                 )
                                 await proc.communicate()
                                 print("[DEPOSIT] getToken.py finished successfully")

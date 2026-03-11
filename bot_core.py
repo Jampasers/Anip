@@ -421,7 +421,7 @@ async def gmail_cmd(ctx, *, credentials: str = None):
         await ctx.send("❌ Format salah! Gunakan: `!gmail email:password`")
         return
     
-    input_path = r"c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server\input.txt"
+    input_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "glog server", "input.txt")
     try:
         with open(input_path, "w", encoding="utf-8") as f:
             f.write(credentials.strip() + "\n")
