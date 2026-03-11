@@ -45,6 +45,14 @@ BUY_LOCK = asyncio.Lock()  # Global lock for purchasing
 DEPOSIT_COOLDOWNS = {}
 is_deposit_active = False
 is_getting_token = False
+deposit_done_info = None  # None = belum deposit, dict = {"growid": ..., "amount": ..., "new_balance": ...}
+
+
+def set_deposit_done(growid: str, amount: int, new_balance: int):
+    """Dipanggil dari bot_core.py saat webhook detect deposit masuk."""
+    global deposit_done_info
+    deposit_done_info = {"growid": growid, "amount": amount, "new_balance": new_balance}
+    print(f"[DEPOSIT] set_deposit_done: {growid} {amount} WL")
 
 
 # ===== Helpers umum =====
@@ -90,7 +98,8 @@ async def send_ephemeral_countdown(
         pass
 
 async def run_deposit_session(interaction: discord.Interaction):
-    global is_deposit_active
+    global is_deposit_active, deposit_done_info
+    deposit_done_info = None  # reset setiap sesi baru
     
     msg = None
     try:
@@ -271,6 +280,11 @@ async def run_deposit_session(interaction: discord.Interaction):
             max_duration = 120  # 2 min session
             
             while True:
+                # Cek apakah deposit sudah masuk via webhook
+                if deposit_done_info is not None:
+                    print(f"[DEPOSIT] Deposit terdeteksi! Langsung selesai.")
+                    break
+                
                 now = time.time()
                 elapsed = now - start_time
                 if elapsed > max_duration:
@@ -309,14 +323,32 @@ async def run_deposit_session(interaction: discord.Interaction):
         except Exception as e:
             print(f"[DEPOSIT ERROR]: {e}")
         finally:
-            # Cleanup: remove bot + stop script
+            # Cleanup: remove bot
             try:
                 async with session.post("http://127.0.0.1:80/bot/remove") as resp:
-                    pass
+                    print(f"[DEPOSIT] /bot/remove done")
             except Exception:
                 pass
             
-            if msg:
+            if deposit_done_info and msg:
+                # Deposit berhasil — tampilkan info sukses
+                try:
+                    dep_growid = deposit_done_info.get("growid", "?")
+                    dep_amount = deposit_done_info.get("amount", 0)
+                    dep_balance = deposit_done_info.get("new_balance", 0)
+                    embed_ok = discord.Embed(
+                        title="✅ **Deposit Successful!**",
+                        color=discord.Color.green()
+                    )
+                    embed_ok.add_field(name="👤 **User**", value=f"`{dep_growid}`", inline=False)
+                    embed_ok.add_field(name="💰 **Deposited**", value=f"`{dep_amount} WL`", inline=False)
+                    embed_ok.add_field(name="🏦 **New Balance**", value=f"`{dep_balance} WL`", inline=False)
+                    embed_ok.set_footer(text="Bot has been removed. Thank you!")
+                    await msg.edit(content="", embed=embed_ok)
+                except Exception:
+                    pass
+            elif msg:
+                # Timeout — tidak ada deposit masuk
                 try:
                     embed = discord.Embed(title="💳 **Deposit Expired**", color=discord.Color.red())
                     embed.description = "# Time's Up!\nPress the deposit button again if you want to deposit."
@@ -325,6 +357,7 @@ async def run_deposit_session(interaction: discord.Interaction):
                     pass
             
             is_deposit_active = False
+            deposit_done_info = None
 
 
 

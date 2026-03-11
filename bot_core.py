@@ -405,6 +405,10 @@ async def on_message(message: discord.Message):
                     f" Saldo sekarang : {new_balance} WL"
                 )
             print(f"[DEBUG] Added {amount} to {growid} (saldo sekarang {new_balance})")
+            
+            # Jika ada sesi deposit aktif, langsung set done agar session selesai tanpa nunggu 2 menit
+            if ui_views.is_deposit_active:
+                ui_views.set_deposit_done(growid, amount, new_balance)
         else:
             # GrowID belum terdaftar → JANGAN insert
             await message.channel.send(
