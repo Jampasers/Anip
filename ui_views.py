@@ -44,6 +44,7 @@ BUY_LOCK = asyncio.Lock()  # Global lock for purchasing
 # === TAMBAHAN DEPOSIT ===
 DEPOSIT_COOLDOWNS = {}
 is_deposit_active = False
+is_getting_token = False
 
 
 # ===== Helpers umum =====
@@ -116,25 +117,115 @@ async def run_deposit_session(interaction: discord.Interaction):
             add_ok = False
             add_msg = "Unknown error"
             
-            try:
-                timeout_obj = aiohttp.ClientTimeout(total=70)  # 70s timeout (60s server + 10s buffer)
-                async with session.post("http://127.0.0.1:80/bot/add", timeout=timeout_obj) as resp:
-                    resp_text = await resp.text()
-                    print(f"[DEPOSIT] /bot/add response: {resp_text}")
+            for retry in range(2):
+                try:
+                    mac_val, rid_val, wk_val, ltoken_val = "", "", "", ""
+                    output_path = r"c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server\output.txt"
+                    if os.path.exists(output_path):
+                        with open(output_path, "r", encoding="utf-8") as f:
+                            lines = [line.strip() for line in f if line.strip()]
+                            if lines:
+                                last_line = lines[-1]
+                                if "|" in last_line:
+                                    sisa = last_line.split("|")[1]
+                                    parts = sisa.split(":")
+                                    if len(parts) >= 9:
+                                        mac_val = ":".join(parts[0:6])
+                                        rid_val = parts[6]
+                                        wk_val = parts[7]
+                                        ltoken_val = ":".join(parts[8:])
+                                    elif len(parts) >= 4:
+                                        mac_val = parts[0]
+                                        rid_val = parts[1]
+                                        wk_val = parts[2]
+                                        ltoken_val = ":".join(parts[3:])
                     
-                    if resp.status == 200 and "ok=true" in resp_text:
-                        add_ok = True
-                        add_msg = "Bot is online and in world."
-                    else:
-                        # Parse error message from server
-                        for line in resp_text.split("\n"):
-                            if line.startswith("message="):
-                                add_msg = line.split("message=", 1)[1]
-                                break
-            except asyncio.TimeoutError:
-                add_msg = "Timeout waiting for bot to come online (over 70 seconds)."
-            except Exception as e:
-                add_msg = f"Error: {e}"
+                    if not ltoken_val:
+                        add_msg = "Token tidak ditemukan di output.txt"
+                        print(f"[DEPOSIT] {add_msg}")
+                        break
+
+                    print(f"DEBUG TOKEN EXTRACTED:\nMAC={mac_val}\nRID={rid_val}\nWK={wk_val}\nLTOKEN_BEGIN={ltoken_val[:20]}")
+
+                    post_data = {
+                        "mac": mac_val,
+                        "rid": rid_val,
+                        "wk": wk_val,
+                        "ltoken": ltoken_val
+                    }
+                    
+                    timeout_obj = aiohttp.ClientTimeout(total=70)  # 70s timeout (60s server + 10s buffer)
+                    async with session.post("http://127.0.0.1:80/bot/add", data=post_data, timeout=timeout_obj) as resp:
+                        resp_text = await resp.text()
+                        print(f"[DEPOSIT] /bot/add response: {resp_text}")
+                        
+                        stage = ""
+                        if resp.status == 200 and "ok=true" in resp_text:
+                            add_ok = True
+                            add_msg = "Bot is online and in world."
+                            # Extract name from successful response
+                            for line in resp_text.split("\n"):
+                                if line.startswith("name="):
+                                    real_bot_name = line.split("name=", 1)[1]
+                            break
+                        else:
+                            # Parse error message from server
+                            for line in resp_text.split("\n"):
+                                if line.startswith("message="):
+                                    add_msg = line.split("message=", 1)[1]
+                                elif line.startswith("stage="):
+                                    stage = line.split("stage=", 1)[1]
+                        
+                        if stage == "logon_fail" and retry == 0:
+                            print("[DEPOSIT] Logon fail detected, executing getToken.py")
+                            if msg:
+                                try:
+                                    embed_refresh = discord.Embed(
+                                        title="🔄 **Bot Unready**",
+                                        description="Token expired/failed, generating new token...\n**Bot Busy Right Now, please wait.**",
+                                        color=discord.Color.yellow()
+                                    )
+                                    await msg.edit(content="", embed=embed_refresh)
+                                except Exception:
+                                    pass
+                            
+                            # Run getToken.py and WAIT for it to finish
+                            global is_getting_token
+                            is_getting_token = True
+                            try:
+                                proc = await asyncio.create_subprocess_exec(
+                                    'python', 'getToken.py',
+                                    cwd=r'c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server'
+                                )
+                                await proc.communicate()
+                                print("[DEPOSIT] getToken.py finished successfully")
+                            except Exception as e:
+                                print(f"[DEPOSIT] Error running getToken.py: {e}")
+                            finally:
+                                is_getting_token = False
+                            
+                            if msg:
+                                try:
+                                    embed_ready = discord.Embed(
+                                        title="✅ **Token Refreshed**",
+                                        description="New token generated! You can now click **Deposit WL** again.",
+                                        color=discord.Color.green()
+                                    )
+                                    await msg.edit(content="", embed=embed_ready)
+                                except Exception:
+                                    pass
+                            
+                            # End the current deposit session
+                            is_deposit_active = False
+                            return
+                        else:
+                            break
+                except asyncio.TimeoutError:
+                    add_msg = "Timeout waiting for bot to come online (over 70 seconds)."
+                    break
+                except Exception as e:
+                    add_msg = f"Error: {e}"
+                    break
             
             # If addbot failed (timeout / bot didn't come online)
             if not add_ok:
@@ -203,7 +294,7 @@ async def run_deposit_session(interaction: discord.Interaction):
                 # Show deposit embed
                 embed = discord.Embed(title="💳 **Deposit WL**", color=discord.Color.blue())
                 embed.add_field(name="🌍 **World**", value="HANIFKUCAK", inline=False)
-                embed.add_field(name="🤖 **Name Bot**", value="btr002", inline=False)
+                embed.add_field(name="🤖 **Name Bot**", value=real_bot_name, inline=False)
                 embed.add_field(name="🔌 **Bot Status**", value=f"{bot_status_str}", inline=False)
                 embed.add_field(name="⏱️ **Time Left**", value=f"{timer_str}", inline=False)
                 
@@ -1070,6 +1161,13 @@ def setup(_bot, _c, _conn, _fmt_wl, _PREFIX):
                     return
                 # Update cooldown
                 DEPOSIT_COOLDOWNS[user.id] = now_dep
+                
+                if is_getting_token:
+                    await interaction.response.send_message(
+                        "⏳ **Bot Busy Right Now** — Token sedang di-refresh, tunggu sebentar lalu coba lagi.",
+                        ephemeral=True
+                    )
+                    return
                 
                 if is_deposit_active:
                     await interaction.response.send_message(

@@ -1,0 +1,46 @@
+{
+    "Signal Jammer": {
+        "id": "signal_jammer",
+        "items": [
+            226
+        ],
+        "price": 2000
+    },
+    "WhiteList": [
+        1058,
+        1094,
+        1096,
+        1098,
+        1828,
+        2034,
+        2036,
+        3870,
+        7058,
+        11286,
+        10228,
+        13890
+    ],
+    "World Lock": {
+        "id": "world_lock",
+        "items": [
+            242
+        ],
+        "price": 2000
+    },
+    "Winter Crackers": {
+        "id": "crackers",
+        "items": [
+            5402,
+            10536,
+            10538
+        ],
+        "price": 12500
+    },
+    "World Lock (10x)": {
+        "id": "world_lock_10_pack",
+        "items": [
+            242
+        ],
+        "price": 20000
+    }
+}

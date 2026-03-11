@@ -413,6 +413,23 @@ async def on_message(message: discord.Message):
         return
     await bot.process_commands(message)
 
+@bot.command(name="gmail")
+@commands.has_permissions(administrator=True)
+async def gmail_cmd(ctx, *, credentials: str = None):
+    """Update input.txt with new gmail credentials. Format: !gmail email:password"""
+    if not credentials or ":" not in credentials:
+        await ctx.send("❌ Format salah! Gunakan: `!gmail email:password`")
+        return
+    
+    input_path = r"c:\Users\Administrator\Desktop\bot dc\bot hanif dc\glog server\input.txt"
+    try:
+        with open(input_path, "w", encoding="utf-8") as f:
+            f.write(credentials.strip() + "\n")
+        await ctx.send(f"✅ `input.txt` berhasil diperbarui dengan credentials baru.")
+        print(f"[GMAIL] input.txt updated: {credentials.split(':')[0]}:****")
+    except Exception as e:
+        await ctx.send(f"❌ Gagal update input.txt: {e}")
+
 @bot.event
 async def on_command_error(ctx, error):
     """Handle command errors gracefully."""

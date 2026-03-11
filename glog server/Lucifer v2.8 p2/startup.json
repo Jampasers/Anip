@@ -1,0 +1,92 @@
+{
+  "bots": [],
+  "fish": {
+    "webhook": ""
+  },
+  "geiger": {
+    "scan_worlds": [],
+    "storage_worlds": [],
+    "webhook": ""
+  },
+  "harvest": {
+    "list": "",
+    "loop": false
+  },
+  "hospitals": [],
+  "parkour": {
+    "webhook": ""
+  },
+  "plant": {
+    "list": "",
+    "loop": false
+  },
+  "proxy_tab": {
+    "auto_check": false,
+    "auto_switch": false,
+    "bots_per_proxy": 3,
+    "bypass_cooldown": 15,
+    "bypass_http": null,
+    "bypass_socks5": null,
+    "cooldown": 1800,
+    "max_http_timeout": 20,
+    "proxies": [],
+    "refresh_cooldown": 1,
+    "spread_proxies": true,
+    "switch_on_ban": false,
+    "switch_on_shadow": false
+  },
+  "rotation": {
+    "farms": [],
+    "interval": 300,
+    "max_seed_ratio": 90.0,
+    "min_seed_ratio": 0.0,
+    "send_webhook": false,
+    "storages": [],
+    "webhook": ""
+  },
+  "settings": {
+    "disconnect_all_on_ban": false,
+    "disconnect_all_on_mod": false,
+    "theme": 3,
+    "trash_limit": 100,
+    "trash_list": [
+      5024,
+      5026,
+      5028,
+      5032,
+      5034,
+      5036,
+      5038,
+      5040,
+      5042,
+      5044,
+      7162,
+      7164
+    ]
+  },
+  "switch": {
+    "accounts": [],
+    "auto_switch": false,
+    "drop_on_switch": false,
+    "force_tutorial": false,
+    "force_wear": false,
+    "items": [],
+    "loop_mode": false,
+    "max_level": 125,
+    "max_playtime": 2592000,
+    "max_runtime": 2592000,
+    "on_aap": false,
+    "on_ban": false,
+    "on_captcha": false,
+    "on_challenge": false,
+    "on_immune": false,
+    "on_irradiated": false,
+    "on_level": false,
+    "on_playtime": false,
+    "on_runtime": false,
+    "on_zombie": false,
+    "rest": false,
+    "rest_time": 60,
+    "storage": ""
+  }
+}
