@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CHROME_MAJOR = 146
+TYPE_WAIT_SECONDS = 3
 PROFILE_STATE_FILENAME = "profile_state.json"
 OUTPUT_FILENAME = os.path.join(BASE_DIR, "output.txt")
 INPUT_FILENAME = os.path.join(BASE_DIR, "input.txt")
@@ -410,8 +411,8 @@ def login_google(driver, email, password, recovery_mail, login_link):
             email_field = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="identifierId"]'))
             )
-            print("Menunggu 10 detik sebelum mengetik email...")
-            sleep(10)
+            print(f"Menunggu {TYPE_WAIT_SECONDS} detik sebelum mengetik email...")
+            sleep(TYPE_WAIT_SECONDS)
             for char in email:
                 email_field.send_keys(char)
                 sleep(random.uniform(0.1, 0.3))
@@ -431,8 +432,8 @@ def login_google(driver, email, password, recovery_mail, login_link):
             pwd_field = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="password"]/div[1]/div/div[1]/input'))
             )
-            print("Menunggu 10 detik sebelum mengetik password...")
-            sleep(10)
+            print(f"Menunggu {TYPE_WAIT_SECONDS} detik sebelum mengetik password...")
+            sleep(TYPE_WAIT_SECONDS)
             for char in password:
                 pwd_field.send_keys(char)
                 sleep(random.uniform(0.1, 0.3))
