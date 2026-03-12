@@ -22,13 +22,15 @@ import string
 import requests
 from datetime import datetime, timezone
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CHROME_MAJOR = 146
 PROFILE_STATE_FILENAME = "profile_state.json"
-OUTPUT_FILENAME = "output.txt"
+OUTPUT_FILENAME = os.path.join(BASE_DIR, "output.txt")
+INPUT_FILENAME = os.path.join(BASE_DIR, "input.txt")
 
 
 def get_profiles_dir():
-    profiles_dir = os.path.abspath("profiles")
+    profiles_dir = os.path.join(BASE_DIR, "profiles")
     os.makedirs(profiles_dir, exist_ok=True)
     return profiles_dir
 
@@ -67,6 +69,7 @@ def save_profile_state(email, provider, status="ready", login_details=None):
         }
     )
     if login_details:
+        output_line = login_details.get("output_line") or login_details.get("lua_ready_line", "")
         state["last_login_details"] = {
             "mac": login_details.get("mac", ""),
             "rid": login_details.get("rid", ""),
@@ -77,7 +80,8 @@ def save_profile_state(email, provider, status="ready", login_details=None):
             "hash2": login_details.get("hash2", ""),
             "meta": login_details.get("meta", ""),
             "ltoken": login_details.get("ltoken", ""),
-            "lua_ready_line": login_details.get("lua_ready_line", ""),
+            "output_line": output_line,
+            "lua_ready_line": output_line,
         }
 
     os.makedirs(os.path.dirname(state_path), exist_ok=True)
@@ -127,7 +131,7 @@ def normalize_ltoken(token):
         return token.replace("\\/", "/")
 
 
-def build_lua_ready_output(email, token, login_details):
+def build_output_line(email, token, login_details):
     login_details = login_details or {}
     mac = login_details.get("mac", "")
     rid = login_details.get("rid", "")
@@ -137,15 +141,15 @@ def build_lua_ready_output(email, token, login_details):
 
 
 def save_output_line(email, token, login_details):
-    output_line = build_lua_ready_output(email, token, login_details)
+    output_line = build_output_line(email, token, login_details)
     with open(OUTPUT_FILENAME, "a", encoding="utf-8") as output_file:
         output_file.write(output_line + "\n")
-    print(f"Saved output ready for login ltoken.lua: {output_line}")
+    print(f"Saved refreshed token to {OUTPUT_FILENAME}: {output_line}")
     return output_line
 
 # Setup Chrome options
 def setup_chrome_options(proxy, load_capsolver=True, email="default"):
-    CAPSOLVER_EXTENSION_PATH = os.path.abspath("Capsolver")
+    CAPSOLVER_EXTENSION_PATH = os.path.join(BASE_DIR, "Capsolver")
     chrome_options = uc.ChromeOptions()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument("--no-sandbox")
@@ -575,6 +579,7 @@ def handle_post_login(driver, email, login_details, proxy, provider):
             output_line = save_output_line(email, token, login_details)
             state_details = dict(login_details or {})
             state_details["ltoken"] = token
+            state_details["output_line"] = output_line
             state_details["lua_ready_line"] = output_line
             save_profile_state(email, provider, status="ready", login_details=state_details)
             try:
@@ -651,7 +656,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    input_file = "input.txt"
+    input_file = INPUT_FILENAME
 
     if args.mail and args.password:
         main(args.proxy, args.mail, args.password, args.recoverymail, args.provider, args.chromemajor)
