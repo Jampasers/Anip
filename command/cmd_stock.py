@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 
@@ -15,6 +16,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     startup_stock_initialized = False
     stock_channel_id = int(os.getenv("STOCK_CHANNEL_ID", "1415989274544836610"))
     server_id_raw = os.getenv("SERVER_ID", "").strip()
+    delete_batch_size = 100
+    delete_batch_delay = 1.0
+    bulk_delete_max_age = datetime.timedelta(days=14)
 
     def build_embed():
         c.execute(
@@ -77,21 +81,48 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
 
     async def reset_stock_message(channel):
         deleted = 0
-        async for msg in channel.history(limit=None):
+        skipped_old = 0
+        recent_cutoff = discord.utils.utcnow() - bulk_delete_max_age
+
+        while True:
+            history_batch = [msg async for msg in channel.history(limit=delete_batch_size)]
+            if not history_batch:
+                break
+
+            recent_messages = [
+                msg for msg in history_batch if msg.created_at >= recent_cutoff
+            ]
+            if not recent_messages:
+                skipped_old = len(history_batch)
+                break
+
             try:
-                await msg.delete()
-                deleted += 1
+                if len(recent_messages) == 1:
+                    await recent_messages[0].delete()
+                else:
+                    await channel.delete_messages(recent_messages)
+                deleted += len(recent_messages)
             except discord.Forbidden:
                 raise
-            except discord.HTTPException:
-                pass
+            except discord.HTTPException as exc:
+                print(f"[STOCK] Gagal bulk delete di channel {channel.id}: {exc}")
+                break
+
+            await asyncio.sleep(delete_batch_delay)
 
         msg = await channel.send(embed=build_embed(), view=StockView())
         message_cache["channel_id"] = channel.id
         message_cache["message"] = msg
-        print(
-            f"[STOCK] Reset stock message in channel {channel.id} (deleted {deleted} messages)"
-        )
+        if skipped_old:
+            print(
+                f"[STOCK] Reset stock message in channel {channel.id} "
+                f"(deleted {deleted} recent messages, skipped messages older than 14 days)"
+            )
+        else:
+            print(
+                f"[STOCK] Reset stock message in channel {channel.id} "
+                f"(deleted {deleted} recent messages)"
+            )
         return msg
 
     async def post_or_refresh_stock(channel):
