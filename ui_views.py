@@ -46,6 +46,7 @@ DEPOSIT_COOLDOWNS = {}
 is_deposit_active = False
 is_getting_token = False
 deposit_done_info = None  # None = belum deposit, dict = {"growid": ..., "amount": ..., "new_balance": ...}
+DEPOSIT_REMOVE_DELAY_SECONDS = 17
 
 
 def set_deposit_done(growid: str, amount: int, new_balance: int):
@@ -323,6 +324,14 @@ async def run_deposit_session(interaction: discord.Interaction):
         except Exception as e:
             print(f"[DEPOSIT ERROR]: {e}")
         finally:
+            # Kalau deposit sukses, tunggu dulu sebelum remove
+            if deposit_done_info is not None:
+                try:
+                    print(f"[DEPOSIT] Deposit sukses, tunggu {DEPOSIT_REMOVE_DELAY_SECONDS} detik sebelum /bot/remove")
+                    await asyncio.sleep(DEPOSIT_REMOVE_DELAY_SECONDS)
+                except Exception:
+                    pass
+
             # Cleanup: remove bot
             try:
                 async with session.post("http://127.0.0.1:80/bot/remove") as resp:

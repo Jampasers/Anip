@@ -18,6 +18,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     server_id_raw = os.getenv("SERVER_ID", "").strip()
     delete_batch_size = 100
     delete_batch_delay = 1.0
+    old_delete_delay = 1.2
     bulk_delete_max_age = datetime.timedelta(days=14)
 
     def build_embed():
@@ -81,7 +82,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
 
     async def reset_stock_message(channel):
         deleted = 0
-        skipped_old = 0
+        deleted_old = 0
         recent_cutoff = discord.utils.utcnow() - bulk_delete_max_age
 
         while True:
@@ -93,7 +94,6 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 msg for msg in history_batch if msg.created_at >= recent_cutoff
             ]
             if not recent_messages:
-                skipped_old = len(history_batch)
                 break
 
             try:
@@ -110,19 +110,26 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
 
             await asyncio.sleep(delete_batch_delay)
 
+        async for msg in channel.history(limit=None):
+            try:
+                await msg.delete()
+                deleted += 1
+                deleted_old += 1
+            except discord.Forbidden:
+                raise
+            except discord.HTTPException as exc:
+                print(f"[STOCK] Gagal hapus pesan lama di channel {channel.id}: {exc}")
+                break
+
+            await asyncio.sleep(old_delete_delay)
+
         msg = await channel.send(embed=build_embed(), view=StockView())
         message_cache["channel_id"] = channel.id
         message_cache["message"] = msg
-        if skipped_old:
-            print(
-                f"[STOCK] Reset stock message in channel {channel.id} "
-                f"(deleted {deleted} recent messages, skipped messages older than 14 days)"
-            )
-        else:
-            print(
-                f"[STOCK] Reset stock message in channel {channel.id} "
-                f"(deleted {deleted} recent messages)"
-            )
+        print(
+            f"[STOCK] Reset stock message in channel {channel.id} "
+            f"(deleted {deleted} messages, including {deleted_old} older-than-14-days messages)"
+        )
         return msg
 
     async def post_or_refresh_stock(channel):
