@@ -14,7 +14,7 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     """Register the stock command and keep one auto-refreshed stock message alive."""
     message_cache = {"channel_id": None, "message": None}
     startup_stock_initialized = False
-    stock_channel_id = int(os.getenv("STOCK_CHANNEL_ID", "1415989274544836610"))
+    stock_channel_id = int(os.getenv("STOCK_CHANNEL_ID", "839981631544754211"))
     server_id_raw = os.getenv("SERVER_ID", "").strip()
     delete_batch_size = 100
     delete_batch_delay = 1.0
