@@ -46,7 +46,7 @@ DEPOSIT_COOLDOWNS = {}
 is_deposit_active = False
 is_getting_token = False
 deposit_done_info = None  # None = belum deposit, dict = {"growid": ..., "amount": ..., "new_balance": ...}
-DEPOSIT_REMOVE_DELAY_SECONDS = 17
+DEPOSIT_REMOVE_DELAY_SECONDS = 5
 
 
 def set_deposit_done(growid: str, amount: int, new_balance: int):
