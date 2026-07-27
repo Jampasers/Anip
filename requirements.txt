@@ -1,0 +1,30 @@
+# ============================================================
+#  Bot Discord (bot_core.py) — dependency inti
+#  Install: pip install -r requirements.txt
+# ============================================================
+discord.py>=2.3
+python-dotenv>=1.0
+aiohttp>=3.9
+psutil>=5.9
+qrcode[pil]>=7.4          # QRIS depo (butuh Pillow, ikut tertarik oleh [pil])
+surfercid                 # dipakai command/cmd_refresh.py (refresh ltoken)
+
+# ============================================================
+#  OPSIONAL — tool "glog server" (getToken.py / getLoginUrl.py)
+#  Uncomment kalau memakai server ambil-token deposit.
+# ============================================================
+# requests>=2.31
+# beautifulsoup4>=4.12
+# fake-useragent>=1.4
+# urllib3>=2.0
+# selenium>=4.15
+# undetected-chromedriver>=3.5
+
+# ============================================================
+#  OPSIONAL — tool "pa" (createSocks.py / changePass.py via SSH)
+#  Uncomment kalau memakai pembuat SOCKS lewat SSH.
+# ============================================================
+# paramiko>=3.0
+
+# Catatan: socks tool - Copy/socks5_relay.py TIDAK butuh dependency
+# eksternal — cuma standard library Python, jadi tidak ada di sini.

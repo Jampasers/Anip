@@ -14,6 +14,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
     @is_maintenance()
     @app_commands.guilds(discord.Object(os.getenv("SERVER_ID")))
     async def deleteproduct(ctx, code: str):
+        if code.lower() == "socks":
+            await ctx.send("Produk `socks` dikelola oleh inventory CloudSigma dan tidak boleh dihapus.")
+            return
         c.execute("SELECT judul, harga FROM stock WHERE kode = ?", (code,))
         row = c.fetchone()
         if not row:

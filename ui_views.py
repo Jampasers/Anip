@@ -11,7 +11,7 @@
 #   * DM hasil (success / partial). Kalau DM gagal saat fulfillment -> cancel & kembalikan stok
 # - ProductSelect (BUY) & ProductSelectPO (BUY PO)
 # - StockView dengan tombol BUY PO di samping BUY
-# - DEPO QRIS (deposit via Pakasir QRIS)
+# - DEPO QRIS (deposit via QRIS)
 
 import re
 import asyncio
@@ -278,7 +278,7 @@ async def run_deposit_session(interaction: discord.Interaction):
             # Only shown when bot is confirmed online
             # =============================================
             start_time = time.time()
-            max_duration = 120  # 2 min session
+            max_duration = 300  # 2 min session
             
             while True:
                 # Cek apakah deposit sudah masuk via webhook
@@ -308,7 +308,7 @@ async def run_deposit_session(interaction: discord.Interaction):
                 
                 # Show deposit embed
                 embed = discord.Embed(title="💳 **Deposit WL**", color=discord.Color.blue())
-                embed.add_field(name="🌍 **World**", value="HANIFKUCAK", inline=False)
+                embed.add_field(name="🌍 **World**", value="HANIFGEMINK", inline=False)
                 embed.add_field(name="🤖 **Name Bot**", value=real_bot_name, inline=False)
                 embed.add_field(name="🔌 **Bot Status**", value=f"{bot_status_str}", inline=False)
                 embed.add_field(name="⏱️ **Time Left**", value=f"{timer_str}", inline=False)
@@ -453,6 +453,7 @@ async def fetch_products_for_select():
         SELECT s.kode, s.judul, COUNT(i.id) as jumlah, s.harga
         FROM stock s
         LEFT JOIN stock_items i ON s.kode = i.kode
+        WHERE LOWER(s.kode) <> 'socks'
         GROUP BY s.kode, s.judul, s.harga
         ORDER BY s.judul ASC
     """
@@ -870,12 +871,12 @@ class BuyPOModal(Modal, title="Enter PO Amount (Max 10)"):
 
 
 # ============================================================
-# DEPO QRIS Modal (Deposit via Pakasir QRIS)
+# DEPO QRIS Modal (Deposit via QRIS)
 # ============================================================
 class DepoQRISModal(Modal, title="Deposit QRIS"):
     """
     Modal untuk input jumlah Rupiah yang ingin di-deposit via QRIS.
-    - Minimal deposit: Rp 500
+    - Minimal deposit: Rp 100
     - Rate mengikuti setting terbaru command /rate
     """
 
@@ -883,8 +884,8 @@ class DepoQRISModal(Modal, title="Deposit QRIS"):
         super().__init__()
         self.author = author
         self.rupiah_input = TextInput(
-            label="Jumlah Rupiah (Min Rp 500)",
-            placeholder="Contoh: 500",
+            label="Jumlah Rupiah (Min Rp 100)",
+            placeholder="Contoh: 100",
             required=True,
             max_length=10,
         )
@@ -904,15 +905,13 @@ class DepoQRISModal(Modal, title="Deposit QRIS"):
 
         try:
             # Validasi input
-            try:
-                rupiah_amount = int(str(self.rupiah_input.value).strip())
-                if rupiah_amount <= 0:
-                    raise ValueError
-            except Exception:
+            amount_text = str(self.rupiah_input.value).strip()
+            if not re.fullmatch(r"[0-9]+", amount_text):
                 await interaction.response.send_message(
                     "❌ Jumlah Rupiah tidak valid (harus angka > 0).", ephemeral=True
                 )
                 return
+            rupiah_amount = int(amount_text)
 
             # Defer untuk proses async
             await interaction.response.defer(ephemeral=True)

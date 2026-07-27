@@ -14,6 +14,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                         usage=f"{PREFIX}buy <code> <amount>",
                         description="Buy product from the bot")
     async def buy(ctx, code: str, amount: int):
+        if code.lower() == "socks":
+            await ctx.send("Gunakan panel `!socks5` untuk membeli SOCKS.")
+            return
         uid = ctx.author.id
         c.execute("SELECT balance FROM users WHERE user_id = ?", (uid,))
         row = c.fetchone()

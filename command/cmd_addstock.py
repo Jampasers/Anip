@@ -33,6 +33,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 await ctx.send("❌ Format salah. Gunakan: !addstock <code> <title> (attach file .txt)")
                 return
             code = re.sub(r'[^a-z0-9]', '', parts[0].lower())
+            if code == "socks":
+                await ctx.send("Stock `socks` hanya boleh masuk otomatis dari CloudSigma.")
+                return
             title_arg = parts[1].strip() if len(parts) > 1 else ""
 
             attachment = ctx.message.attachments[0]
@@ -121,6 +124,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 await ctx.send("❌ Format salah. Gunakan: !addstock <code> \"<title>\" <item1,item2,...>")
                 return
             code = re.sub(r'[^a-z0-9]', '', parts[0].lower())
+            if code == "socks":
+                await ctx.send("Stock `socks` hanya boleh masuk otomatis dari CloudSigma.")
+                return
             title = parts[1].strip()
             items_raw = " ".join(parts[2:])
             items = [x.strip() for x in items_raw.split(",") if x.strip()]
@@ -141,6 +147,9 @@ def setup(bot, c, conn, fmt_wl, PREFIX):
                 await ctx.send("❌ Format salah. Gunakan: !addstock <code> <item1,item2,...>")
                 return
             code = re.sub(r'[^a-z0-9]', '', parts[0].lower())
+            if code == "socks":
+                await ctx.send("Stock `socks` hanya boleh masuk otomatis dari CloudSigma.")
+                return
             items_raw = parts[1]
             items = [x.strip() for x in items_raw.split(",") if x.strip()]
             if not items:

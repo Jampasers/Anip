@@ -488,7 +488,7 @@ The ItemInfo class represents information about an item in the game. It contains
 
 #### Example
 ```lua
-print("You need to hit "..getInfo(7188).strength.." times to break blue gem lock.")
+print("You need to hit "..getInfo(7188).strength.." times to  blue gem lock.")
 ```
 
 ## GameUpdatePacket

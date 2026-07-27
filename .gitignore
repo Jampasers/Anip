@@ -239,3 +239,21 @@ bot dc.zip
 .DS_Store
 Thumbs.db
 import discord.py
+
+# ⛔ Profil Chrome / Selenium (cache + cookies + TOKEN/LOGIN — sensitif, jangan commit)
+glog server/profiles/
+# Ekstensi vendor Capsolver (uncomment kalau tak mau ikut ke repo)
+# glog server/Capsolver/
+
+# ⛔ SQLite WAL/SHM & backup
+*.db-shm
+*.db-wal
+*.db-journal
+*.backup_*
+discord_sqlite_bot.db.backup_*
+
+# ⛔ QR hasil generate
+QR/
+
+# ⛔ Proyek terpisah (punya git & GitHub sendiri, bukan bagian bot hanif dc)
+pa/
